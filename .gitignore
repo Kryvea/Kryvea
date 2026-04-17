@@ -1,0 +1,21 @@
+# production
+**/dist/
+**/build/
+
+# dependencies
+**/node_modules
+**/tsconfig.tsbuildinfo
+
+.data/
+
+app/internal/report/*/reports/
+app/internal/nessus/reports/
+
+scripts/venv/
+scripts/populate_db/images/
+__pycache__/
+
+*.burp*
+
+docs/.vitepress/cache
+docs/.vitepress/dist
