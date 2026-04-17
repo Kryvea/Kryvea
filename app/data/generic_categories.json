@@ -1,0 +1,883 @@
+[
+  {
+    "identifier": "A01:2021",
+    "name": "Broken Access Control",
+    "subcategory": "",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Broken Access Control is a security vulnerability that allows unauthorized users to access resources or perform actions beyond their intended permissions within a system or application. It arises from failures in authorization mechanisms, weak session management, or inadequate access control design, potentially leading to data breaches, account compromise, and other security incidents.",
+      "it": "Broken Access Control è una vulnerabilità di sicurezza che consente agli utenti non autorizzati di accedere alle risorse o di eseguire azioni al di là delle autorizzazioni previste all'interno di un sistema o di un'applicazione. Si verifica a causa di errori nei meccanismi di autorizzazione, di una gestione debole delle sessioni o di una progettazione inadeguata del controllo degli accessi, che può portare a violazioni di dati, compromissione di account e altri incidenti di sicurezza."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to enforce strict access control checks on the server side for every request, avoid relying on client-side enforcement, and ensure that users can only access the resources and actions for which they are authorized.",
+      "it": "Si consiglia di applicare verifiche rigorose del controllo degli accessi lato server per ogni richiesta, evitando di affidarsi all'applicazione lato client e garantendo che gli utenti possano accedere solo alle risorse e alle azioni per le quali sono autorizzati."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/284.html",
+      "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+    ]
+  },
+  {
+    "identifier": "A01:2021",
+    "name": "Broken Access Control",
+    "subcategory": "CORS Misconfiguration",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "CORS misconfiguration refers to overly permissive settings that allow untrusted origins to access a web application's resources, potentially leading to data theft, session hijacking, or other security risks. This vulnerability arises from improper configuration of HTTP headers, such as “Access-Control-Allow-Origin”, that control which domains can make cross-origin requests.",
+      "it": "L'errata configurazione della CORS si riferisce a configurazioni troppo permissive che consentono a origini non attendibili di accedere alle risorse di un'applicazione Web, con il rischio di furto di dati, session hijacking o altri rischi per la sicurezza. Questa vulnerabilità deriva da una configurazione impropria degli header HTTP, come “Access-Control-Allow-Origin”, che controllano quali domini possono effettuare richieste cross-origin."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to set the “Access-Control-Allow-Origin” header to allow only specific, trusted domains instead of using wildcards (*), avoid dynamically reflecting the Origin header without thorough validation, and never include the null origin in the allow list.",
+      "it": "Si consiglia di impostare l'header “Access-Control-Allow-Origin” in modo da consentire solo domini specifici e affidabili, invece di utilizzare wildcard (*), di evitare di riflettere dinamicamente l'intestazione Origin senza un'accurata validazione e di non includere mai l'origine “null” nella lista."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/942.html",
+      "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+    ]
+  },
+  {
+    "identifier": "A01:2021",
+    "name": "Broken Access Control",
+    "subcategory": "Cross-Site Request Forgery (CSRF)",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Cross-Site Request Forgery is an attack that tricks the victim into submitting a malicious request. It inherits the identity and privileges of the victim to perform an undesired function on the victim's behalf. For most sites, browser requests automatically include any credentials associated with the site, such as the user's session cookie, IP address, Windows domain credentials, and so forth. Therefore, if the user is currently authenticated to the site, the site will have no way to distinguish between the forged request sent by the victim and a legitimate request sent by the victim.",
+      "it": "Il Cross-Site Request Forgery è un attacco che inganna la vittima e la induce a inviare una richiesta malevola. Il sistema eredita l'identità e i privilegi della vittima per eseguire una funzione indesiderata per conto di quest'ultima. Per la maggior parte dei siti, le richieste del browser includono automaticamente qualsiasi credenziale associata al sito, come il cookie di sessione dell'utente, l'indirizzo IP, le credenziali di dominio Windows e così via. Pertanto, se l'utente è attualmente autenticato al sito, quest'ultimo non avrà modo di distinguere tra la richiesta contraffatta inviata dalla vittima e una richiesta legittima inviata dalla vittima."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement anti-CSRF tokens that are unique, unpredictable, and tied to the user session, and validate these tokens on all state-changing requests. Additionally, enforce strict SameSite cookie attributes (preferably Strict or Lax) to prevent cookies from being sent on cross-origin requests.",
+      "it": "Si consiglia di implementare token anti-CSRF unici, imprevedibili e legati alla sessione dell'utente e di convalidare questi token su tutte le richieste che cambiano stato. Inoltre, applicare attributi dei cookie SameSite stringenti (preferibilmente Strict o Lax) per impedire l'invio di cookie su richieste cross-origin."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/352.html",
+      "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+      "https://owasp.org/www-community/attacks/csrf"
+    ]
+  },
+  {
+    "identifier": "A01:2021",
+    "name": "Broken Access Control",
+    "subcategory": "Full Path Disclosure",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Full Path Disclosure (FPD) vulnerability occurs when a web application unintentionally reveals the full directory path of files on its server. This can happen through error messages or improper handling of user input. The disclosed path information can help attackers understand the server's file structure, potentially leading to attacks like Local File Inclusion or Path Traversal.",
+      "it": "La vulnerabilità di Full Path Disclosure (FPD) si verifica quando un'applicazione web rivela inavvertitamente il percorso completo dei file sul server. Questo può accadere tramite messaggi di errore o una gestione non corretta degli input utente. Le informazioni sul percorso divulgate possono aiutare un attaccante a comprendere la struttura dei file del server, facilitando attacchi più come Local File Inclusion o Path Traversal."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to verify that detailed error messages, including file paths, are not shown to end users.",
+      "it": "Si consiglia di verificare che i messaggi di errore dettagliati, inclusi i percorsi dei file, non vengano mostrati agli utenti finali."
+    },
+    "references": [
+      "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+      "https://owasp.org/www-community/attacks/Full_Path_Disclosure"
+    ]
+  },
+  {
+    "identifier": "A01:2021",
+    "name": "Broken Access Control",
+    "subcategory": "Insecure Direct Object Reference (IDOR)",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insecure Direct Object References (IDOR) occur when an application grants access to objects based on user-supplied input without performing sufficient authorization checks. This vulnerability allows attackers to bypass access controls by modifying parameters that directly reference resources such as database records or files, enabling unauthorized access to sensitive system objects.",
+      "it": "La vulnerabilità di tipo Insecure Direct Object References (IDOR) si verifica quando un'applicazione permette l'accesso agli oggetti in base all'input fornito dall'utente senza eseguire sufficienti controlli di autorizzazione. Questa vulnerabilità consente agli attaccanti di aggirare i controlli di accesso modificando i parametri che fanno riferimento diretto a risorse come record di database o file, consentendo l'accesso non autorizzato a dati sensibili del sistema."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to enforce strict access control checks on every object access attempt to verify user authorization, and replace direct object references with indirect references, such as random identifiers (UUIDs or GUIDs) to prevent enumeration.",
+      "it": "Si consiglia di applicare controlli rigorosi per verificare l'autorizzazione dell'utente ad accedere agli oggetti e di sostituire i riferimenti diretti con identificatori indiretti, come UUID o GUID, per prevenire l'enumerazione."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/639.html",
+      "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References"
+    ]
+  },
+  {
+    "identifier": "A01:2021",
+    "name": "Broken Access Control",
+    "subcategory": "Sensitive Information Disclosure",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Sensitive Information Disclosure happens when an application does not adequately protect sensitive information that may wind up being disclosed to parties that are not supposed to have access to it. Sensitive data can include application-related information, such as session tokens, file names, stack traces, or confidential information, such as passwords, credit card data, sensitive health data, private communications, intellectual property, metadata, the product's source code, etc.",
+      "it": "La divulgazione di informazioni sensibili avviene quando un'applicazione non protegge adeguatamente le informazioni sensibili che possono finire per essere divulgate a soggetti che non dovrebbero avervi accesso. I dati sensibili possono includere informazioni relative all'applicazione, come token di sessione, nomi di file, tracce di stack, o informazioni riservate, come password, dati di carte di credito, dati sanitari sensibili, comunicazioni private, proprietà intellettuale, metadati, codice sorgente del prodotto, ecc."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement strict access controls to ensure only authorized users can access sensitive data.",
+      "it": "Si consiglia di implementare controlli di accesso rigorosi per garantire che solo gli utenti autorizzati possano accedere ai dati sensibili."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/200.html",
+      "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "Command Injection",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Command injection is a vulnerability where an attacker can use an application to execute arbitrary commands on the underlying operating system. This is often achieved by injecting malicious commands through unsafe user input that is then passed to a system shell. The attacker can then potentially gain control of the server with the privileges of the vulnerable application.",
+      "it": "La command injection è una vulnerabilità in cui un utente malintenzionato può utilizzare un'applicazione per eseguire comandi arbitrari sul sistema operativo sottostante. Questo avviene spesso iniettando comandi malevoli attraverso input non sicuri dell'utente che vengono poi passati ad una shell di sistema. L'attaccante può quindi potenzialmente ottenere il controllo del server con i privilegi dell'applicazione vulnerabile."
+    },
+    "generic_remediation": {
+      "en": "It is not recommended to execute operating system commands directly with user-supplied input. If necessary, use safe APIs or built-in library functions that do not invoke the shell. Finally, rigorously validate and sanitize all user inputs by applying strict allow-lists for permitted characters or commands and rejecting any input containing shell metacharacters such as ;, &, |, or $.",
+      "it": "Si raccomanda di non eseguire mai comandi del sistema operativo direttamente con l'input fornito dall'utente. Se necessario, utilizzare API sicure o funzioni di libreria integrate che non richiamino la shell. Infine, convalidare e sanificare rigorosamente tutti gli input dell'utente applicando allow list stringenti per i caratteri o i comandi consentiti e rifiutando qualsiasi input contenente metacaratteri di shell come ;, &, | o $."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/77.html",
+      "https://cwe.mitre.org/data/definitions/78.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-community/attacks/Command_Injection"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "Cross-Site Scripting (XSS) Reflected",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Reflected cross-site scripting (Reflected XSS) is a type of web application vulnerability where an attacker injects malicious code, typically JavaScript, into a web application. This code is then reflected back to the victim's browser, often through a link, and executed within the victim's browser session. Unlike persistent XSS, reflected XSS attacks don't store the malicious script on the server; instead, the attack is triggered by a single request/response cycle.",
+      "it": "Il reflected cross-site scripting è un tipo di vulnerabilità delle applicazioni web in cui un attaccante inietta codice malevolo, solitamente JavaScript, in un'applicazione web. Questo codice viene poi riflesso nel browser della vittima, spesso tramite un link, ed eseguito all'interno della sessione del browser della vittima. A differenza dello XSS stored, gli attacchi reflected XSS non memorizzano lo script malevolo sul server; invece, l'attacco viene eseguito da un singolo flusso di richiesta/risposta."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement proper input validation and output encoding to ensure that all user-supplied data is sanitized before rendering in the browser. Use context-aware encoding (e.g., HTML entity encoding, JavaScript escaping) and employ security headers like Content Security Policy (CSP) to prevent execution of malicious scripts.",
+      "it": "Si consiglia di implementare una corretta validazione degli input e una codifica dell'output per garantire che tutti i dati forniti dall'utente siano sanificati prima della visualizzazione nel browser. Utilizzare una codifica contestuale (ad esempio, codifica delle entità HTML, escape di JavaScript) ed adottare header di sicurezza come la Content Security Policy (CSP) per prevenire l'esecuzione di script dannosi."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/79.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-community/attacks/xss/"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "Cross-Site Scripting (XSS) Stored",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Stored cross-site scripting (XSS), also known as persistent XSS, is a type of XSS attack where malicious scripts are injected into a web application and permanently stored on its server. This happens when a web application's input validation fails to properly sanitize or encode user-generated content, allowing an attacker to inject malicious JavaScript code.",
+      "it": "Lo stored cross-site scripting (XSS), noto anche come XSS persistente, è un tipo di attacco XSS in cui script dannosi vengono iniettati in un'applicazione web e memorizzati in modo permanente sul server. Ciò accade quando la validazione dell'input di un'applicazione web non riesce a sanificare o codificare correttamente il contenuto generato dall'utente, consentendo ad un attaccante di iniettare codice JavaScript dannoso."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement proper input validation and output encoding to ensure that all user-supplied data is sanitized before rendering in the browser. Use context-aware encoding (e.g., HTML entity encoding, JavaScript escaping) and employ security headers like Content Security Policy (CSP) to prevent execution of malicious scripts.",
+      "it": "Si consiglia di implementare una corretta validazione degli input e una codifica dell'output per garantire che tutti i dati forniti dall'utente siano sanificati prima della visualizzazione nel browser. Utilizzare una codifica contestuale (ad esempio, codifica delle entità HTML, escape di JavaScript) ed adottare header di sicurezza come la Content Security Policy (CSP) per prevenire l'esecuzione di script dannosi."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/79.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-community/attacks/xss/"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "Cross-Site Scripting (XSS) DOM Based",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "DOM Based cross-site scripting is an XSS attack wherein the attack payload is executed as a result of modifying the DOM “environment” in the victim's browser used by the original client side script, so that the client side code runs in an “unexpected” manner. That is, the page itself (the HTTP response that is) does not change, but the client side code contained in the page executes differently due to the malicious modifications that have occurred in the DOM environment. This is in contrast to other XSS attacks (stored or reflected), wherein the attack payload is placed in the response page (due to a server side flaw).",
+      "it": "Il cross-site scripting basato sul DOM è un attacco XSS in cui il payload dell'attacco viene eseguito come risultato della modifica dell'“ambiente” DOM nel browser della vittima utilizzato dallo script client originale, in modo che il codice client venga eseguito in modo “inaspettato”. In altre parole, la pagina stessa (cioè la risposta HTTP) non cambia, ma il codice lato client contenuto nella pagina viene eseguito in modo diverso a causa delle modifiche malevole apportate all'ambiente DOM. Ciò è in contrasto con altri attacchi XSS (stored o reflected), in cui il payload dell'attacco viene inserito nella pagina di risposta (a causa di una falla sul lato server)."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement proper input validation and output encoding to ensure that all user-supplied data is sanitized before rendering in the browser. Use context-aware encoding (e.g., HTML entity encoding, JavaScript escaping) and employ security headers like Content Security Policy (CSP) to prevent execution of malicious scripts.",
+      "it": "Si consiglia di implementare una corretta validazione degli input e una codifica dell'output per garantire che tutti i dati forniti dall'utente siano sanificati prima della visualizzazione nel browser. Utilizzare una codifica contestuale (ad esempio, codifica delle entità HTML, escape di JavaScript) ed adottare header di sicurezza come la Content Security Policy (CSP) per prevenire l'esecuzione di script dannosi."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/79.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-community/attacks/DOM_Based_XSS"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "Formula Injection",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "CSV Injection, also known as Formula Injection, occurs when websites embed untrusted input inside CSV files. When a spreadsheet program such as Microsoft Excel or LibreOffice Calc is used to open a CSV, any cells starting with = will be interpreted by the software as a formula. Maliciously crafted formulas can be used for three key attacks:\n• Hijacking the user's computer by exploiting vulnerabilities in the spreadsheet software, such as CVE-2014-3524.\n• Hijacking the user's computer by exploiting the user's tendency to ignore security warnings in spreadsheets that they downloaded from their own website.\n• Exfiltrating contents from the spreadsheet, or other open spreadsheets.",
+      "it": "La CSV Injection, nota anche come Formula Injection, si verifica quando i siti Web incorporano input non attendibili all'interno di file CSV. Quando un programma di foglio elettronico come Microsoft Excel o LibreOffice Calc viene utilizzato per aprire un CSV, qualsiasi cella che inizia con = viene interpretata dal software come una formula. Le formule create male possono essere utilizzate per tre attacchi chiave:\n• Hijacking del computer dell'utente sfruttando le vulnerabilità del software del foglio di calcolo, come CVE-2014-3524.\n• Hijacking del computer dell'utente sfruttando la tendenza dell'utente a ignorare gli avvisi di sicurezza nei fogli di calcolo scaricati dal proprio sito web. \n• Esfiltrare il contenuto del foglio di calcolo o di altri fogli di calcolo aperti."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement data verification and validation procedures, filtering characters:• Equals to (=)\n• Plus (+)\n• Minus (-)\n• At (@)\n• Tab (0x09)\n• Carriage return (0x0D)",
+      "it": "Si consiglia di implementare procedure di verifica e validazione dei dati, filtrando i caratteri:• =\n• +\n• -\n• @\n• 0x09\n• 0x0D"
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/1236.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-community/attacks/CSV_Injection"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "HTML Injection",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "HTML injection is a vulnerability that occurs when a user can insert arbitrary HTML code into a vulnerable web page, due to improper sanitization of input and failure to encode the output. This allows the attacker to send malicious content that the victim's browser interprets as a legitimate part of the page, executing it in its context.",
+      "it": "L'“HTML injection” è una vulnerabilità che si verifica quando un utente può inserire codice HTML arbitrario in una pagina web vulnerabile, a causa di una non corretta sanificazione dell'input e mancata codifica dell'output. Questo permette all'attaccante di inviare contenuti dannosi che il browser della vittima interpreta come parte legittima della pagina, eseguendoli nel suo contesto."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to sanitize the user input in order to prevent editing the HTML structure of the pages, for instance by converting it to HTML entities.",
+      "it": "Si consiglia di sanificare l'input dell'utente per evitare che si possa modificare la struttura HTML delle pagine, ad esempio convertendolo in entità HTML."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/79.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/11-Client-side_Testing/03-Testing_for_HTML_Injection"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "Improper Input Validation",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Improper input validation is a vulnerability that occurs when an application fails to correctly check or sanitize user-supplied input, allowing malicious or unexpected data to influence the program's control flow or data processing. It arises when input is not validated for syntactical correctness (format, type, length) and semantic validity (allowed values, ranges), enabling attackers to manipulate inputs to bypass security controls, corrupt data, or execute arbitrary commands.",
+      "it": "La validazione impropria dell'input è una vulnerabilità che si verifica quando un'applicazione non controlla o sanifica correttamente l'input fornito dall'utente, consentendo a dati malevoli o inaspettati di influenzare il flusso di controllo o l'elaborazione dei dati del programma. Si verifica quando l'input non viene convalidato per la correttezza sintattica (formato, tipo, lunghezza) e la validità semantica (valori consentiti, intervalli), consentendo agli attaccanti di manipolare gli input per aggirare i controlli di sicurezza, corrompere i dati o eseguire comandi arbitrari."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to validate inputs on both the client and server sides, respecting the expected data formats, types, lengths, and value ranges, and rejecting or properly handling any invalid or unexpected data before processing.",
+      "it": "Si consiglia di convalidare gli input sia lato client che lato server, rispettando i formati, i tipi, le lunghezze e gli intervalli di valori previsti e rifiutando o gestendo correttamente qualsiasi dato non valido o inatteso prima dell'elaborazione."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/20.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "SQL Injection",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "A SQL injection attack consists of insertion or “injection” of a SQL query via the input data from the client to the application. A successful SQL injection exploit can read sensitive data from the database, modify database data (Insert/Update/Delete), execute administration operations on the database (such as shutdown the DBMS), recover the content of a given file present on the DBMS file system and in some cases issue commands to the operating system. SQL injection attacks are a type of injection attack, in which SQL commands are injected into data-plane input in order to affect the execution of predefined SQL commands.",
+      "it": "Un attacco di tipo SQL injection consiste nell'inserimento o nell'“iniezione” di una query SQL attraverso i dati in ingresso dal client all'applicazione. Un attacco SQL injection riuscito può leggere dati sensibili dal database, modificare i dati del database (inserimento/aggiornamento/cancellazione), eseguire operazioni di amministrazione sul database (come l'arresto del DBMS), recuperare il contenuto di un determinato file presente nel file system del DBMS e in alcuni casi impartire comandi al sistema operativo. Gli attacchi di tipo SQL injection sono un tipo di attacco in cui i comandi SQL vengono iniettati nell'input del data-plane per influenzare l'esecuzione di comandi SQL predefiniti."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to always use parameterized queries or prepared statements to safely handle user inputs and also avoid dynamic SQL queries constructed with direct user input.",
+      "it": "Si consiglia di utilizzare sempre query parametrizzate o prepared statement per gestire in modo sicuro gli input degli utenti e inoltre evitare query SQL dinamiche costruite con input utente diretto."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/89.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-community/attacks/SQL_Injection"
+    ]
+  },
+  {
+    "identifier": "A03:2021",
+    "name": "Injection",
+    "subcategory": "XXE Injection",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "An XML External Entity attack is a type of attack against an application that parses XML input. This attack occurs when XML input containing a reference to an external entity is processed by a weakly configured XML parser. This attack may lead to the disclosure of confidential data, denial of service, server side request forgery, port scanning from the perspective of the machine where the parser is located, and other system impacts.",
+      "it": "L'attacco XML External Entity è un tipo di attacco contro un'applicazione che analizza l'input XML. Questo attacco si verifica quando l'input XML contenente un riferimento a un'entità esterna viene elaborato da un parser XML non correttamente configurato. Questo attacco può portare alla divulgazione di dati riservati, denial of service, server side request forgery, alla scansione delle porte dal punto di vista della macchina in cui si trova il parser e ad altri impatti sul sistema."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to disable Document Type Definitions (DTDs) and external entity processing in the XML parser. Also, configure the parser to disallow external entity resolution and avoid processing untrusted XML input.",
+      "it": "Si consiglia di disabilitare le Document Type Definitions (DTD) e l'elaborazione di entità esterne nel parser XML. Inoltre, configurare il parser per disabilitare la risoluzione di entità esterne ed evitare l'elaborazione di input XML non attendibili."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/91.html",
+      "https://owasp.org/Top10/A03_2021-Injection/",
+      "https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing"
+    ]
+  },
+  {
+    "identifier": "A04:2021",
+    "name": "Insecure Design",
+    "subcategory": "Abuse of Functionality",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Abuse of functionality is an attack technique that uses a web site's own features and functionality to attack itself or others. Abuse of functionality can be described as the abuse of an application's intended functionality to perform an undesirable outcome. These attacks have varied results such as consuming resources, circumventing access controls, or leaking information. The potential and level of abuse will vary from web site to web site and application to application.",
+      "it": "L'abuso di funzionalità è una tecnica di attacco che utilizza le caratteristiche e le funzionalità di un sito web per attaccare se stesso o altri. L'abuso di funzionalità può essere descritto come l'abuso della funzionalità prevista di un'applicazione per ottenere un risultato indesiderato. Questi attacchi hanno risultati diversi, come il consumo di risorse, l'elusione dei controlli di accesso o la divulgazione di informazioni. Il potenziale e il livello di abuso variano da sito a sito e da applicazione ad applicazione. "
+    },
+    "generic_remediation": {
+      "en": "It is recommended to review the functionality in order to not allow a use other than that intended.",
+      "it": "Si consiglia di rivedere la funzionalità per non consentire un uso diverso da quello previsto."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/840.html",
+      "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+    ]
+  },
+  {
+    "identifier": "A04:2021",
+    "name": "Insecure Design",
+    "subcategory": "Business Logic",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Business logic vulnerabilities are flaws in the design and implementation of an application that allow an attacker to elicit unintended behavior. This potentially enables attackers to manipulate legitimate functionality to achieve a malicious goal. These flaws are generally the result of failing to anticipate unusual application states that may occur and, consequently, failing to handle them safely.",
+      "it": "Le vulnerabilità di tipo business logic sono difetti nella progettazione e nell'implementazione di un'applicazione che consentono ad un attaccante di ottenere un comportamento non previsto. Ciò consente potenzialmente agli attaccanti di manipolare funzionalità legittime per raggiungere un obiettivo malevolo. Queste falle sono generalmente il risultato di una mancata previsione degli stati insoliti dell'applicazione che potrebbero verificarsi e, di conseguenza, di una mancata gestione sicura degli stessi."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement strict validation of user actions against the defined rules, apply appropriate authentication and authorization controls.",
+      "it": "Si consiglia di implementare una rigorosa validazione delle azioni degli utenti rispetto alle regole definite, applicare controlli adeguati di autenticazione ed autorizzazione."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/840.html",
+      "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+      "https://owasp.org/www-community/vulnerabilities/Business_logic_vulnerability"
+    ]
+  },
+  {
+    "identifier": "A04:2021",
+    "name": "Insecure Design",
+    "subcategory": "Improper Error Handling",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Improper handling of errors can introduce a variety of security problems for a web site. The most common problem is when detailed internal error messages such as stack traces, database dumps, and error codes are displayed to the user. These messages reveal implementation details that should never be revealed. Such details can provide malicious users important clues on potential flaws in the site and such messages are also disturbing to normal users.",
+      "it": "Una gestione impropria degli errori può introdurre una serie di problemi di sicurezza per un sito web. Il problema più comune è quando vengono visualizzati all'utente messaggi di errore interni dettagliati, come tracce di stack, dump di database e codici di errore. Questi messaggi rivelano dettagli di implementazione che non dovrebbero mai essere rivelati. Tali dettagli possono fornire agli utenti malintenzionati importanti indizi su potenziali falle nel sito e tali messaggi disturbano anche gli utenti normali."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to return generic error messages in order to avoid revealing sensitive information in error messages and implement proper error logging.",
+      "it": "Si consiglia di ritornare messaggi di errore generici al fine di evitare di rivelare informazioni sensibili nei messaggi di errore e implementare una corretta registrazione degli errori."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/209.html",
+      "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+      "https://owasp.org/www-community/Improper_Error_Handling"
+    ]
+  },
+  {
+    "identifier": "A04:2021",
+    "name": "Insecure Design",
+    "subcategory": "Insufficient Anti-Automation",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insufficient anti-automation vulnerability occurs when a system, such as a web application, allows automated attacks to exploit functionalities designed for human users, such as login forms or account creation. This vulnerability can enable attackers to bypass security measures, potentially leading to credential cracking, account creation spam, or service disruption.",
+      "it": "Una vulnerabilità anti-automazione insufficiente si verifica quando un sistema, come un'applicazione web, consente agli attacchi automatici di sfruttare funzionalità progettate per gli utenti umani, come i moduli di login o la creazione di account. Questa vulnerabilità può consentire agli aggressori di aggirare le misure di sicurezza, portando potenzialmente al cracking delle credenziali, alla creazione di account spam o all'interruzione del servizio."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement anti-automation security measures to not allow brute force attacks.",
+      "it": "Si consiglia di implementare delle misure di sicurezza anti-automazione in modo tale da non permettere attacchi di tipo brute force."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/799.html",
+      "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+    ]
+  },
+  {
+    "identifier": "A04:2021",
+    "name": "Insecure Design",
+    "subcategory": "Unrestricted File Upload",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Unrestricted file upload refers to a web application vulnerability where users can upload files without proper validation or restrictions, potentially leading to vulnerability like malicious code execution or system takeover. This can happen because the application does not verify the file type, extension, or content before saving it to the server.",
+      "it": "Il caricamento di file senza restrizioni si riferisce ad una vulnerabilità in applicazioni web in cui gli utenti possono caricare file senza un'adeguata convalida o restrizione, portando potenzialmente a vulnerabilità come esecuzione di codice malevolo. Ciò può accadere perché l'applicazione non verifica il tipo, l'estensione o il contenuto del file prima di salvarlo sul server."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement strict file type validation using an allow list approach, verify both file extensions and file content, rename uploaded files to avoid dangerous names and restrict upload directories with no execute permissions.",
+      "it": "Si consiglia di implementare una rigorosa convalida del tipo di file utilizzando un approccio basato su un elenco di tipi consentiti, di verificare sia le estensioni che il contenuto dei file, di rinominare i file caricati per evitare nomi pericolosi e di limitare le directory di upload senza permessi di esecuzione."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/434.html",
+      "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+      "https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload"
+    ]
+  },
+  {
+    "identifier": "A04:2021",
+    "name": "Insecure Design",
+    "subcategory": "Malicious File Upload",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "A malicious file upload vulnerability occurs when the file upload functionality is exploited to upload malicious files, such as viruses or malware. This allows the files to be uploaded without triggering security mechanisms, such as IPS/IDS or anti-virus scans. Unlike uploading unexpected files, this vulnerability allows harmful files to bypass security mechanisms even if the file type is accepted.",
+      "it": "Una vulnerabilità “malicious file upload” si verifica quando la funzionalità di caricamento dei file viene sfruttata per caricare file malevoli, come virus o malware. Ciò consente di caricare i file senza attivare i meccanismi di sicurezza, come IPS/IDS o scansioni antivirus. A differenza del caricamento di file inaspettati, questa vulnerabilità consente ai file malevoli di aggirare i meccanismi di sicurezza anche se il tipo di file è accettato."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to perform a virus/anti-malware scan for all files uploaded by users.",
+      "it": "Si consiglia di eseguire una scansione antivirus/anti-malware di tutti i file caricati dagli utenti."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/434.html",
+      "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/10-Business_Logic_Testing/09-Test_Upload_of_Malicious_Files"
+    ]
+  },
+  {
+    "identifier": "A04:2021",
+    "name": "Insecure Design",
+    "subcategory": "User Enumeration",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "User enumeration is a security flaw in web applications or systems that allows an attacker to identify valid usernames or user accounts by analyzing differences in system responses during authentication attempts. This vulnerability typically manifests when the application reveals distinct error messages, response times, or other indicators that differentiate between valid and invalid usernames during login or password recovery processes.",
+      "it": "L'enumerazione degli utenti è una problematica di sicurezza nelle applicazioni web o nei sistemi che consente ad un attaccante di identificare nomi utente o account utente validi analizzando le differenze nelle risposte del sistema durante i tentativi di autenticazione. Questa vulnerabilità si manifesta tipicamente quando l'applicazione rivela messaggi di errore, tempi di risposta o altri indicatori distinti che differenziano i nomi utente validi da quelli non validi durante i processi di login o di recupero della password."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to standardize error messages and responses for both valid and invalid usernames, ensuring that the application does not disclose whether a username exists or not.",
+      "it": "Si consiglia di standardizzare i messaggi di errore e le risposte sia per i nomi utente validi che per quelli non validi, garantendo che l'applicazione non riveli se un nome utente esiste o meno."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/204.html",
+      "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/03-Identity_Management_Testing/04-Testing_for_Account_Enumeration_and_Guessable_User_Account"
+    ]
+  },
+  {
+    "identifier": "A05:2021",
+    "name": "Security Misconfiguration",
+    "subcategory": "Directory Listing",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "A directory listing vulnerability occurs when a web server reveals the contents of a directory to users or attackers when no specific identifier file (like identifier.html or identifier.php) is present. This exposes potentially sensitive information about the site's structure and content, which can be used to identify and target other vulnerabilities.",
+      "it": "Una vulnerabilità di directory listing si verifica quando un server Web rivela il contenuto di una directory agli utenti o agli attaccanti quando non è presente un file di indice specifico (come identifier.html o identifier.php). Questo espone informazioni potenzialmente sensibili sulla struttura e sul contenuto del sito, che possono essere utilizzate per identificare e colpire altre vulnerabilità."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to disable directory listing on your web server configuration and ensure sensitive files are not accessible through it.",
+      "it": "Si consiglia di disabilitare l'elenco delle directory nella configurazione del server web e di assicurarsi che i file sensibili non siano accessibili attraverso di esso."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/548.html",
+      "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+    ]
+  },
+  {
+    "identifier": "A05:2021",
+    "name": "Security Misconfiguration",
+    "subcategory": "Insufficient Cookie Protection",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "This vulnerability occurs when cookies, especially those containing session data or sensitive information, are not properly protected. When a server generates cookies, it is important to correctly specify the security attributes, such as:\n• Secure: The Secure attribute tells the browser to only send the cookie if the request is being sent over a secure channel such as HTTPS.\n• HttpOnly: The HttpOnly attribute is used to help prevent attacks such as session leakage, since it does not allow the cookie to be accessed via a client-side script such as JavaScript.\n• Domain: The Domain attribute is used to compare the cookie's domain against the domain of the server for which the HTTP request is being made. If the domain matches or if it is a subdomain, then the path attribute will be checked next.\n• Path: The Path attribute plays a major role in setting the scope of the cookies in conjunction with the domain. In addition to the domain, the URL path that the cookie is valid for can be specified.\n• Expires or Max-Age: Specify an expiration date or time period after which the cookie should be deleted and no longer sent.\n• SameSite: The SameSite attribute can be used to assert whether a cookie should be sent along with cross-site requests. This attribute can be configured in three different modes: Strict, Lax, None",
+      "it": "Questa vulnerabilità si verifica quando i cookie, in particolare quelli contenenti dati di sessione o informazioni sensibili, non sono protetti correttamente. Quando un server genera i cookie, è importante specificare correttamente gli attributi di sicurezza, come ad esempio:\n• Secure: L'attributo Secure indica al browser di inviare il cookie solo se la richiesta viene inviata su un canale sicuro come HTTPS.\n• HttpOnly: L'attributo HttpOnly è utilizzato per prevenire attacchi come leak di sessione, poiché non consente l'accesso al cookie tramite uno script lato client come JavaScript.\n• Domain: L'attributo Domain viene utilizzato per confrontare il dominio del cookie con il dominio del server per il quale viene effettuata la richiesta HTTP. Se il dominio corrisponde o se è un sottodominio, viene controllato l'attributo path.\n• Path: L'attributo Path svolge un ruolo importante nell'impostare l'ambito dei cookie insieme al dominio. Oltre al dominio, è possibile specificare il percorso dell'URL per cui il cookie è valido.\n• Expires o Max-Age: specificano una data di scadenza o un periodo di tempo dopo il quale il cookie deve essere cancellato e non più inviato.\n• SameSite: L'attributo SameSite può essere utilizzato per stabilire se un cookie debba essere inviato insieme alle richieste cross-site. Questo attributo può essere configurato in tre modalità diverse: Strict, Lax, None"
+    },
+    "generic_remediation": {
+      "en": "It is recommended to set the appropriate security attributes to cookies.",
+      "it": "Si consiglia di impostare gli appropriati attributi di sicurezza ai cookie."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/614.html",
+      "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/04-Authentication_Testing/07-Testing_for_Weak_Password_Policy",
+      "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies"
+    ]
+  },
+  {
+    "identifier": "A05:2021",
+    "name": "Security Misconfiguration",
+    "subcategory": "Missing HTTP Security Headers",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Missing HTTP security headers can expose websites and applications to various attacks by failing to enforce security measures that browsers would otherwise implement. These vulnerabilities can lead to unauthorized access, sensitive data exposure, and further exploitation by malicious actors. OWASP best practices recommend setting the following headers:\n• X-Content-Type-Options: usually set with the value “nosniff” specifies to the browser to use the defined mime type without overriding a potential Cross-Site Scripting attack; \n• X-Frame-Options: usually set with “DENY” or with congruous values if the application uses frames and iframes, it avoids the opening of frames containing arbitrary contents, mitigating Click Jacking attacks; \n• Strict-Transport-Security: specifies that it is possible to display contents only through the HTTPS protocol, avoiding Man-In-The-Middle attacks; \n• Content-Security-Policy: specifies from where and / or what type of resources it is allowed to load; \n• X-Permitted-Cross-Domain-Policies: is an XML document that grants a web client, such as Adobe Flash Player or Adobe Acrobat, permission to manage data between domains. \n• Referrer-Policy: regulates which referrer information, sent in the Referer header, is to be included in requests made; \n• Clear-Site-Data: clears navigation data (cookies, memory, cache) associated with the requesting website. It allows web developers to have more control over the data stored locally by a browser for their origins; \n• Cross-Origin-Embedder-Policy: prevents a document from loading any cross-origin resource that does not explicitly grant permission to the document; \n• Cross-Origin-Opener-Policy: ensures that a top-level document does not share a navigation context group with cross-origin documents; \n• Cross-Origin-Resource-Policy: allows a policy to be defined that allows web sites and applications to choose to be protected from certain requests from other origins to mitigate speculative side-channel attacks; \n• Cache-Control: contains instructions for caching in both requests and responses.",
+      "it": "La mancanza di HTTP security header può esporre siti web e applicazioni a vari attacchi, non applicando le misure di sicurezza che i browser implementerebbero altrimenti. Queste vulnerabilità possono portare ad accessi non autorizzati, all'esposizione di dati sensibili e all'ulteriore sfruttamento da parte di malintenzionati. Le best practice OWASP consigliano di impostare i seguenti header:\n• Strict-Transport-Security: aiuta a proteggere i siti web dagli attacchi di downgrade del protocollo e da cookie hijacking. Consente ai server web di dichiarare che i browser web devono interagire con essi solo tramite connessioni sicure HTTPS e mai tramite il protocollo insicuro HTTP;\n• X-Frame-Options: migliora la protezione delle applicazioni web contro clickjacking. Indica al browser se il contenuto può essere visualizzato all'interno di frame;\n• X-Content-Type-Options: impedirà al browser di interpretare i file con un tipo MIME diverso da quello specificato nell'intestazione HTTP Content-Type;\n• Content-Security-Policy: previene un'ampia gamma di attacchi, tra cui il Cross-Site Scripting e altre Cross-Site injections;\n• X-Permitted-Cross-Domain-Policies: concede a un client Web l'autorizzazione a gestire i dati tra i domini;\n• Referrer-Policy: regola quali informazioni sul referente, inviate nell'intestazione Referer, devono essere incluse nelle richieste effettuate;\n• Clear-Site-Data: cancella i dati di navigazione (cookie, memoria, cache) associati al sito web richiedente. Consente agli sviluppatori web di avere un maggiore controllo sui dati memorizzati localmente da un browser per le loro origini;\n• Cross-Origin-Embedder-Policy: impedisce a un documento di caricare qualsiasi risorsa di origine incrociata che non conceda esplicitamente l'autorizzazione al documento;\n• Cross-Origin-Opener-Policy: consente di garantire che un documento di primo livello non condivida un gruppo di contesto di navigazione con documenti cross-origin;\n• Cross-Origin-Resource-Policy: permette di definire un criterio che consente ai siti e alle applicazioni web di scegliere di essere protetti da determinate richieste provenienti da altre origini per mitigare gli attacchi speculativi side-channel;\n• Cache-Control: contiene istruzioni per la cache sia nelle richieste che nelle risposte."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to follow OWASP best practices regarding the use and configuration of HTTP security headers.",
+      "it": "Si consiglia di seguire le best practice OWASP riguardo l'utilizzo e la configurazione degli HTTP security header."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/693.html",
+      "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
+      "https://owasp.org/www-project-secure-headers/#div-headers",
+      "https://owasp.org/www-project-secure-headers/#div-bestpractices"
+    ]
+  },
+  {
+    "identifier": "A05:2021",
+    "name": "Security Misconfiguration",
+    "subcategory": "",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Security misconfiguration occurs when security options are set or configured improperly, leaving systems vulnerable to attacks. Examples include leaving default passwords or configurations, enabling unnecessary features, failing to patch software, and revealing sensitive information in error messages.",
+      "it": "Una security misconfiguration si verifica quando le opzioni di sicurezza vengono impostate o configurate in modo improprio, rendendo i sistemi vulnerabili agli attacchi. Ad esempio, si lasciano password o configurazioni predefinite, si abilitano funzioni non necessarie, non si applica alcuna patch al software e si rivelano informazioni sensibili nei messaggi di errore."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to disable unused services and default accounts, and enforcing the principle of least privilege for access controls.",
+      "it": "Si consiglia di disabilitare i servizi inutilizzati e gli account predefiniti e di applicare il principio del minimo privilegio per i controlli di accesso."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/16.html",
+      "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/"
+    ]
+  },
+  {
+    "identifier": "A06:2021",
+    "name": "Vulnerable and Outdated Components",
+    "subcategory": "",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Using components with known vulnerabilities refers to the practice of incorporating software libraries, frameworks, or modules that have publicly disclosed security flaws into an application. These vulnerabilities may stem from coding errors, design flaws, or outdated versions of the components. Since these components often run with the same privileges as the application, attackers can exploit their weaknesses to gain unauthorized access, steal sensitive data, introduce malware, or disrupt system operations. ",
+      "it": "L'utilizzo di componenti con vulnerabilità note si riferisce all'impiego di librerie software, framework o moduli che presentano falle di sicurezza pubblicamente divulgate all'interno di un'applicazione. Queste vulnerabilità possono derivare da errori di programmazione, difetti di progettazione o versioni obsolete dei componenti. Poiché tali componenti spesso operano con gli stessi privilegi dell'applicazione, un attaccante può sfruttarne le debolezze per ottenere accesso non autorizzato, rubare dati sensibili, introdurre malware o compromettere il funzionamento del sistema."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to update the vulnerable component to the latest version available.",
+      "it": "Si consiglia di aggiornare il componente vulnerabile all'ultima versione disponibile."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/1104.html",
+      "https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/"
+    ]
+  },
+  {
+    "identifier": "A07:2021",
+    "name": "Identification and Authentication Failures",
+    "subcategory": "Broken Authentication",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Broken Authentication vulnerabilities occur when an application's authentication process is flawed, allowing unauthorized access to resources or functionalities. This can happen due to weak passwords, vulnerabilities in login pages, session hijacking, or insufficient encryption. Essentially, it's about the system failing to properly verify a user's identity.",
+      "it": "Le vulnerabilità di Broken Authentication si verificano quando il processo di autenticazione di un'applicazione è difettoso e consente l'accesso non autorizzato a risorse o funzionalità. Ciò può accadere a causa di password deboli, vulnerabilità nelle pagine di login, session hijacking o crittografia insufficiente. In sostanza, il sistema non riesce a verificare correttamente l'identità dell'utente."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement strong password policies, use multi-factor authentication, and ensure secure session management practices.",
+      "it": "Si consiglia di implementare policy di password forti, di utilizzare l'autenticazione a più fattori e di garantire pratiche di gestione delle sessioni sicure."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/287.html",
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+    ]
+  },
+  {
+    "identifier": "A07:2021",
+    "name": "Identification and Authentication Failures",
+    "subcategory": "Improper Logout",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "An improper logout vulnerability arises when an application fails to properly invalidate user sessions upon logout, allowing attackers to potentially reuse those sessions for unauthorized access. This vulnerability can happen when the application relies solely on a session cookie for authentication and doesn't perform server-side tracking of active sessions. Attackers can then intercept the session cookie and, if the application doesn't properly invalidate the session, gain access to the user's account.",
+      "it": "Una vulnerabilità di tipo improper logout si verifica quando un'applicazione non riesce a invalidare correttamente le sessioni degli utenti al momento del logout, consentendo agli attaccanti di riutilizzare potenzialmente tali sessioni per accessi non autorizzati. Questa vulnerabilità può verificarsi quando l'applicazione si affida esclusivamente a un cookie di sessione per l'autenticazione e non esegue il monitoraggio lato server delle sessioni attive. Gli attaccanti possono intercettare il cookie di sessione e, se l'applicazione non invalida correttamente la sessione, ottenere l'accesso all'account dell'utente."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to ensure that the logout process properly invalidates the user's session on the server side by deleting or expiring the session token.",
+      "it": "Si consiglia di assicurarsi che il processo di logout invalidi correttamente la sessione dell'utente lato server eliminando o facendo scadere il token di sessione."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/613.html",
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+    ]
+  },
+  {
+    "identifier": "A07:2021",
+    "name": "Identification and Authentication Failures",
+    "subcategory": "Weak Password Policy",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "A Weak Password Policy vulnerability occurs when an application or system allows users to create passwords that are easy to guess or crack, increasing the risk of unauthorized access and data breaches. This is a vulnerability that can make systems vulnerable to brute-force attacks, dictionary attacks, and credential stuffing, among other techniques.",
+      "it": "Una vulnerabilità di tipo Weak Password Policy si verifica quando un'applicazione o un sistema consente agli utenti di creare password facili da indovinare o da craccare, aumentando il rischio di accesso non autorizzato e di violazione dei dati. Si tratta di una vulnerabilità che può rendere i sistemi vulnerabili ad attacchi brute-force, attacchi a dizionario e credential stuffing, tra le altre tecniche."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to introduce additional authentication controls (e.g., two-factor authentication) and/or introduce a strong password policy.",
+      "it": "Si consiglia di introdurre controlli di autenticazione aggiuntivi (ad esempio, l'autenticazione a due fattori) e/o introdurre una politica di password forti."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/521.html",
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+    ]
+  },
+  {
+    "identifier": "A10:2021",
+    "name": "Server-Side Request Forgery (SSRF)",
+    "subcategory": "",
+    "source": "owasp_web",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "In a Server-Side Request Forgery (SSRF) attack, the attacker can abuse functionality on the server to read or update internal resources. The attacker can supply or modify a URL which the code running on the server will read or submit data to, and by carefully selecting the URLs, the attacker may be able to read server configuration such as AWS metadata, connect to internal services like http enabled databases or perform post requests towards internal services which are not intended to be exposed.",
+      "it": "In un attacco Server-Side Request Forgery (SSRF), l'attaccante può abusare delle funzionalità del server per leggere o aggiornare le risorse interne. L'attaccante può fornire o modificare un URL che il codice in esecuzione sul server leggerà o invierà dati; selezionando attentamente gli URL, l'attaccante può essere in grado di leggere la configurazione del server come i metadati AWS, connettersi a servizi interni come i database abilitati http o eseguire richieste di post verso servizi interni che non sono destinati a essere esposti."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement strict allow lists for permitted domains and IP addresses while rejecting all others; validate and sanitize user inputs used to generate URLs by enforcing allowed schemes; and avoid exposing raw response data from server-side requests to clients.",
+      "it": "Si consiglia di implementare allow list per i domini e gli indirizzi IP consentiti e di rifiutare tutti gli altri; di convalidare e sanificare gli input dell'utente utilizzati per generare gli URL facendo rispettare gli schemi consentiti; di evitare di esporre ai client i dati di risposta raw delle richieste lato server."
+    },
+    "references": [
+      "https://cwe.mitre.org/data/definitions/918.html",
+      "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/",
+      "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery"
+    ]
+  },
+  {
+    "identifier": "M1:2024",
+    "name": "Improper Credential Usage",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insecure credential management can occur when mobile apps use hardcoded credentials or when credentials are misused. This can include:\n• Hardcoded Credentials: mobile app contains hardcoded credentials within the app’s source code or any configuration files.\n• Insecure Credential Transmission: credentials transmitted without encryption or through insecure channels.\n• Insecure Credential Storage: mobile app stores user credentials on the device in an insecure manner.\n• Weak User Authentication: user authentication relies on weak protocols or allows for easy bypassing.",
+      "it": "Una gestione insicura delle credenziali può verificarsi quando le app mobili utilizzano credenziali hardcoded o quando le credenziali vengono utilizzate in modo improprio. Questo può includere:\n• Credenziali hardcoded: l'app mobile contiene credenziali hardcoded nel codice sorgente dell'app o in qualsiasi file di configurazione.\n• Trasmissione insicura delle credenziali: credenziali trasmesse senza crittografia o attraverso canali non sicuri.\n• Memorizzazione insicura delle credenziali: l'applicazione mobile memorizza le credenziali dell'utente sul dispositivo in modo insicuro.\n• Autenticazione utente debole: l'autenticazione dell'utente si basa su protocolli deboli o consente di bypassarli facilmente."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement secure credential management practices, such as using secure storage mechanisms, encrypting sensitive data, and avoiding hardcoded credentials.",
+      "it": "Si consiglia di implementare pratiche di gestione sicura delle credenziali, come l'utilizzo di meccanismi di archiviazione sicuri, la crittografia dei dati sensibili ed evitare credenziali hardcoded."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m1-improper-credential-usage.html"
+    ]
+  },
+  {
+    "identifier": "M2:2024",
+    "name": "Inadequate Supply Chain Security",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "An attacker can exploit vulnerabilities in the mobile app supply chain to manipulate application functionality. For instance, they can insert malicious code into the app's codebase or modify the code during the build process to introduce backdoors, spyware, or other malicious code. Vulnerabilities can arise for a variety of reasons, such as:\n• Lack of security in third-party components: The mobile application developer does not properly vet or update third-party components.\n• Inadequate Testing and Validation: The mobile application developer does not test the application thoroughly.\n• Lack of Security Awareness: The mobile application developer lacks adequate security awareness.",
+      "it": "Un attaccante può sfruttare le vulnerabilità nella catena di distribuzione delle app mobili per manipolare le funzionalità dell'applicazione. Ad esempio, può inserire codice dannoso nella base di codice dell'applicazione o modificare il codice durante il processo di creazione per introdurre backdoor, spyware o altro codice dannoso. Le vulnerabilità possono sorgere per una serie di motivi, come ad esempio:\n• Mancanza di sicurezza nei componenti di terze parti: Lo sviluppatore dell'applicazione mobile non controlla o aggiorna correttamente i componenti di terze parti.\n• Test e convalida inadeguati: Lo sviluppatore dell'applicazione mobile non testa a fondo l'applicazione.\n• Mancanza di consapevolezza della sicurezza: Lo sviluppatore dell'applicazione mobile non ha un'adeguata consapevolezza della sicurezza."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to adopt safe code development practices with extensive testing and reviews; use reliable and up-to-date libraries; and ensure safe processes for signing and updating the app.",
+      "it": "Si consiglia di adottare pratiche di sviluppo sicuro del codice con test approfonditi e revisioni; utilizzare librerie affidabili ed aggiornate; garantire processi sicuri di firma e aggiornamento dell'app."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m2-inadequate-supply-chain-security.html"
+    ]
+  },
+  {
+    "identifier": "M3:2024",
+    "name": "Insecure Authentication/Authorization",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insecure authorization can occur when an organization fails to authenticate an individual before executing a requested API endpoint from a mobile device, as it is virtually impossible to conduct authorization checks on an incoming request without an established caller's identity. Examples of this vulnerability include:\n• Anonymous Backend API Execution: The ability of the app to execute a backend API service request without providing an access token.\n• Local Storage of Passwords or Shared Secrets: The app stores any passwords or shared secrets locally on the device.\n• Weak Password Policy: The use of a simplified password-entering process.\n• Usage of Features like FaceID and TouchID: Employing features like FaceID or TouchID could be indicative of insecure authentication.",
+      "it": "L'autorizzazione non sicura può verificarsi quando un'organizzazione non riesce ad autenticare un individuo prima di eseguire una richiesta di una API da un dispositivo mobile, in quanto è praticamente impossibile effettuare controlli di autorizzazione su una richiesta in entrata senza che sia stata stabilita l'identità del chiamante. Esempi di questa vulnerabilità sono:\n• Esecuzione anonima di API di backend: La capacità dell'applicazione di eseguire una richiesta di servizio API di backend senza fornire un token di accesso.\n• Memorizzazione locale di password o segreti condivisi: L'applicazione memorizza le password o i segreti condivisi localmente sul dispositivo.\n• Password policy debole: L'uso di un processo semplificato di inserimento della password.\n• Utilizzo di funzioni come FaceID e TouchID."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to avoid weak local-only checks that can be bypassed on compromised devices. Store tokens securely using device features like Keychain or Keystore; never store passwords on the device. Properly implement multi-factor and biometric authentication, but always enforce authorization and permission checks on the server. Never trust client-side data.",
+      "it": "Si consiglia di evitare i controlli solo locali che possono essere bypassati su dispositivi compromessi. Memorizzare i token in modo sicuro utilizzando funzioni del dispositivo come Keychain o Keystore; non memorizzare mai le password sul dispositivo. Implementare correttamente l'autenticazione a più fattori e il riconoscimento biometrico, ma applicare sempre i controlli di autorizzazione e permesso lato server. Non affidarsi mai ai dati lato client."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m3-insecure-authentication-authorization.html"
+    ]
+  },
+  {
+    "identifier": "M4:2024",
+    "name": "Insufficient Input/Output Validation",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insufficient validation and sanitization of data from external sources, such as user inputs or network data, in a mobile application can introduce severe security vulnerabilities. Without proper safeguards, mobile apps are susceptible to attacks like SQL injection, command injection, and cross-site scripting (XSS), which can result in unauthorized access to sensitive information, manipulation of app functionality, and potential full system compromise. Moreover, inadequate output validation may cause data corruption or presentation flaws, enabling attackers to inject malicious code or alter sensitive information displayed to users.",
+      "it": "Un'insufficiente validazione e sanitizzazione dei dati provenienti da fonti esterne, come gli input dell'utente o i dati di rete, in un'applicazione mobile può introdurre severe vulnerabilità di sicurezza. Senza le dovute protezioni, le applicazioni mobili sono suscettibili ad attacchi come SQL injection, command injection e cross-site scripting (XSS), che possono provocare l'accesso non autorizzato a informazioni sensibili, la manipolazione delle funzionalità dell'applicazione e la potenziale compromissione dell'intero sistema. Inoltre, una validazione inadeguata dell'output può causare il danneggiamento dei dati o difetti di presentazione, consentendo agli aggressori di iniettare codice dannoso o alterare le informazioni sensibili mostrate agli utenti."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to validate and sanitize all external inputs and outputs.",
+      "it": "Si consiglia di validare e sanitizzare tutti gli input ed output esterni."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m4-insufficient-input-output-validation.html"
+    ]
+  },
+  {
+    "identifier": "M5:2024",
+    "name": "Insecure Communication",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insecure communication is a vulnerability in which data transmitted between a mobile application and backend servers, or between mobile devices, is exposed to interception or tampering due to weak or misconfigured security controls. It often results from using outdated encryption protocols, improper SSL/TLS implementations, or incorrect certificate validation, which enables attackers to perform man-in-the-middle (MITM) attacks and access sensitive information, such as credentials, financial data, and personal details.",
+      "it": "La comunicazione insicura è una vulnerabilità in cui i dati trasmessi tra un'applicazione mobile e i server backend, o tra i dispositivi mobili, sono esposti a intercettazione o manipolazione a causa di controlli di sicurezza deboli o mal configurati. Spesso deriva dall'utilizzo di protocolli di crittografia obsoleti, da implementazioni SSL/TLS non corrette o da una non corretta convalida dei certificati, che consentono agli attaccanti di eseguire attacchi man-in-the-middle (MITM) e di accedere a informazioni sensibili, come credenziali, dati finanziari e dettagli personali."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to ensure all data in transit is protected using strong encryption protocols like TLS 1.2 or higher, implement proper certificate validation and pinning, and avoid using deprecated or insecure communication channels.",
+      "it": "Si consiglia di garantire che tutti i dati in transito siano protetti utilizzando protocolli di crittografia forti come TLS 1.2 o superiore, di implementare la convalida dei certificati e il pinning adeguati e di evitare l'uso di canali di comunicazione deprecati o non sicuri."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m5-insecure-communication.html"
+    ]
+  },
+  {
+    "identifier": "M7:2024",
+    "name": "Insufficient Binary Protection",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insufficient binary protection is a vulnerability in which a mobile application's compiled binary lacks robust defenses against reverse engineering, tampering, and unauthorized modification. This vulnerability exposes sensitive assets, such as hardcoded secrets, proprietary algorithms, and critical business logic, to attackers, who can then analyze, alter, or repurpose the app's code. Beyond gathering information, attackers can manipulate binaries to unlock paid features without authorization or bypass security controls. In severe cases, attackers can modify popular apps to include malicious code and redistribute them through third-party app stores or under counterfeit identities to exploit unsuspecting users.",
+      "it": "La protezione binaria insufficiente è una vulnerabilità in cui il binario compilato di un'applicazione mobile manca di difese solide contro il reverse engineering, la manomissione e la modifica non autorizzata. Questa vulnerabilità espone risorse sensibili, come segreti hardcoded, algoritmi proprietari e logica aziendale critica, agli attaccanti, che possono analizzare, alterare o riutilizzare il codice dell'applicazione. Oltre a raccogliere informazioni, gli attaccanti possono manipolare i binari per sbloccare funzioni a pagamento senza autorizzazione o aggirare i controlli di sicurezza. Nei casi più gravi, gli attaccanti possono modificare le app più diffuse per includere codice dannoso e ridistribuirle attraverso app store di terze parti o sotto identità contraffatte per sfruttare utenti inconsapevoli."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement code obfuscation, app signing, jailbreak/root detection, integrity checks at runtime, and debugger detection.",
+      "it": "Si consiglia di implementare l'offuscamento del codice, la firma delle applicazioni, il rilevamento di jailbreak/root, i controlli di integrità in fase di esecuzione e il rilevamento di debugger."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m7-insufficient-binary-protection.html"
+    ]
+  },
+  {
+    "identifier": "M8:2024",
+    "name": "Security Misconfiguration",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Security misconfiguration in mobile applications refers to the improper setup or management of security settings, permissions, and controls, which exposes the application to vulnerabilities and unauthorized access. Examples include insecure default configurations, overly permissive file or storage permissions, exposed sensitive information, weak encryption, and failure to disable debugging or development features in production.",
+      "it": "L'errata configurazione della sicurezza nelle applicazioni mobili si riferisce all'impostazione o alla gestione impropria delle impostazioni, dei permessi e dei controlli di sicurezza, che espone l'applicazione a vulnerabilità e accessi non autorizzati. Tra gli esempi si possono citare le configurazioni predefinite non sicure, le autorizzazioni troppo permissive per i file o lo storage, le informazioni sensibili esposte, la crittografia debole e la mancata disabilitazione delle funzioni di debug o di sviluppo in produzione."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to enforce secure default settings, eliminate the use of default credentials, apply the principle of least privilege for permissions, disable debugging and backup features in production, and restrict exposed app components to only those essential for functionality.",
+      "it": "Si consiglia di applicare impostazioni predefinite sicure, di eliminare l'uso di credenziali di default, di applicare il principio del minimo privilegio per le autorizzazioni, di disabilitare le funzioni di debug e di backup in produzione e di limitare i componenti dell'applicazione esposti solo a quelli essenziali per la funzionalità."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m8-security-misconfiguration.html"
+    ]
+  },
+  {
+    "identifier": "M9:2024",
+    "name": "Insecure Data Storage",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insecure data storage is a vulnerability in which mobile applications fail to adequately protect sensitive data stored locally on the device or in the cloud, thereby exposing it to unauthorized access, tampering, or leakage. This vulnerability is often caused by insufficient encryption, a lack of proper access controls, misconfigured cloud storage, insecure caching, or vulnerable third-party libraries.",
+      "it": "L'archiviazione insicura dei dati è una vulnerabilità in cui le applicazioni mobili non riescono a proteggere adeguatamente i dati sensibili archiviati localmente sul dispositivo o nel cloud, esponendoli così ad accessi non autorizzati, manipolazioni o perdite. Questa vulnerabilità è spesso causata da una crittografia insufficiente, dalla mancanza di controlli di accesso adeguati, da un cloud storage mal configurato, da una cache non sicura o da librerie di terze parti vulnerabili."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement strong encryption for data stored, use platform-specific secure storage mechanisms like iOS Keychain or Android Keystore and enforce strict access controls.",
+      "it": "Si consiglia di implementare una robusta crittografia per i dati memorizzati, di utilizzare meccanismi di archiviazione sicura specifici per la piattaforma, come iOS Keychain o Android Keystore, e di applicare controlli di accesso rigorosi."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m9-insecure-data-storage.html"
+    ]
+  },
+  {
+    "identifier": "M10:2024",
+    "name": "Insufficient Cryptography",
+    "subcategory": "",
+    "source": "owasp_mobile",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Insufficient cryptography occurs when mobile applications use weak, outdated, or improperly implemented cryptographic algorithms and protocols. This compromises the confidentiality, integrity, and authenticity of sensitive data. Examples of this vulnerability include obsolete encryption methods, flawed key management, hardcoded keys, inadequate key lengths, and insecure random number generation. Attackers can exploit these issues to decrypt data, forge signatures, bypass security controls, or manipulate information.",
+      "it": "Una crittografia insufficiente si verifica quando le applicazioni mobili utilizzano algoritmi e protocolli crittografici deboli, obsoleti o non correttamente implementati. Ciò compromette la riservatezza, l'integrità e l'autenticità dei dati sensibili. Esempi di questa vulnerabilità sono i metodi di crittografia obsoleti, la gestione errata delle chiavi, le chiavi hardcoded, la lunghezza inadeguata delle chiavi e la generazione insicura di numeri casuali. Gli attaccanti possono sfruttare questi problemi per decifrare i dati, falsificare le signature, aggirare i controlli di sicurezza o manipolare le informazioni."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to use up-to-date encryption algorithms with adequate key lengths, implement secure key management practices, avoid hardcoding keys, and rely on well-vetted cryptographic libraries and protocols.",
+      "it": "Si consiglia di utilizzare algoritmi di crittografia aggiornati con chiavi di lunghezza adeguata, di implementare pratiche di gestione delle chiavi sicure, di evitare hardcoding delle chiavi e di affidarsi a librerie e protocolli crittografici ben collaudati."
+    },
+    "references": [
+      "https://owasp.org/www-project-mobile-top-10/2023-risks/m10-insufficient-cryptography.html"
+    ]
+  },
+  {
+    "identifier": "API1:2023",
+    "name": "Broken Object Level Authorization",
+    "subcategory": "",
+    "source": "owasp_api",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Broken Object Level Authorization occurs when an API fails to properly verify that a user has permission to access a specific object or record. Attackers can manipulate object identifiers in requests to access data or perform actions on resources they are not authorized to, leading to unauthorized data exposure, modification, or deletion.",
+      "it": "La Broken Object Level Authorization si verifica quando un'API non verifica correttamente che un utente abbia il permesso di accedere a un oggetto o record specifico. Gli utenti malintenzionati possono manipolare gli identificatori degli oggetti nelle richieste per accedere a dati o eseguire azioni su risorse per le quali non sono autorizzati, causando esposizione non autorizzata, modifica o cancellazione dei dati."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to enforce strict object-level authorization on the server for every request using object identifiers, verifying the user's permissions for each specific object before granting access or allowing modifications.",
+      "it": "Si consiglia di controllare l'autorizzazione a livello di oggetto sul server per ogni richiesta che utilizza identificatori di oggetti, verificando i permessi dell'utente per ciascun oggetto prima di concedere l'accesso o consentire le modifiche."
+    },
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/"
+    ]
+  },
+  {
+    "identifier": "API2:2023",
+    "name": "Broken Authentication",
+    "subcategory": "",
+    "source": "owasp_api",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Broken Authentication occurs when an API's authentication mechanisms are flawed, allowing attackers to bypass authentication controls. This can happen due to weak passwords, lack of account lockout, improper session management, or exposure of sensitive authentication data. Attackers can gain unauthorized access to accounts, leading to account takeover.",
+      "it": "La Broken Authentication si verifica quando i meccanismi di autenticazione di un'API sono difettosi, permettendo agli utenti malintenzionati di bypassare i controlli di autenticazione. Ciò può succedere a causa di password deboli, mancata applicazione del blocco dell'account dopo tentativi falliti, gestione errata delle sessioni o esposizione di dati sensibili di autenticazione. Gli utenti malintenzionati possono ottenere accesso non autorizzato agli account, conducendo a furto d'identità e abuso."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to enforce strong authentication controls such as multi-factor authentication, account lockout on repeated failed attempts, secure session handling, and proper validation of authentication tokens.",
+      "it": "Si consiglia di implementare i controlli sull'autenticazione, incluso l'uso dell'autenticazione a più fattori, il blocco dell'account dopo ripetuti tentativi falliti, una gestione sicura delle sessioni e la corretta validazione dei token di autenticazione."
+    },
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/"
+    ]
+  },
+  {
+    "identifier": "API4:2023",
+    "name": "Unrestricted Resource Consumption",
+    "subcategory": "",
+    "source": "owasp_api",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Unrestricted Resource Consumption occurs when an API does not properly limit the amount of resources that can be consumed by clients, such as CPU, memory, bandwidth, or request rate. This allows attackers to overwhelm the API by sending excessive requests or large data payloads, causing denial of service, degraded performance, or excessive costs.",
+      "it": "Il consumo illimitato di risorse si verifica quando un'API non limita correttamente la quantità di risorse che i client possono utilizzare, come CPU, memoria, larghezza di banda o frequenza delle richieste. Questo permette agli attaccanti di sovraccaricare l'API inviando richieste eccessive o dati di grandi dimensioni, causando interruzioni del servizio, degrado delle prestazioni o costi elevati."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to limits on resource consumption including rate limiting, request size limits, execution timeouts, and memory usage caps.",
+      "it": "Si consiglia di limitare il consumo di risorse, inclusi limiti di velocità, limiti di dimensione delle richieste, timeout di esecuzione e limiti di utilizzo della memoria."
+    },
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/"
+    ]
+  },
+  {
+    "identifier": "API5:2023",
+    "name": "Broken Function Level Authorization",
+    "subcategory": "",
+    "source": "owasp_api",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Broken Function Level Authorization happens when APIs with complex access control policies fail to properly restrict users from accessing functions or actions outside their permissions. Attackers can exploit this to perform unauthorized actions, including sensitive administrative functions, leading to data leaks, data corruption, or service disruption.",
+      "it": "Broken Function Level Authorization si verifica quando API con politiche di controllo accessi complesse non riescono a limitare correttamente gli utenti dall'accesso a funzioni o azioni oltre i loro permessi. Gli utenti malintenzionati possono sfruttare questa falla per effettuare azioni non autorizzate, incluse funzioni amministrative sensibili, causando perdite di dati, corruzione o interruzione del servizio."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to implement strict role-based access controls verifying user permissions for every function or endpoint.",
+      "it": "Si consiglia di implementare controlli di accesso basati sui ruoli verificando i permessi degli utenti per ogni funzione o endpoint."
+    },
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/"
+    ]
+  },
+  {
+    "identifier": "API8:2023",
+    "name": "Security Misconfiguration",
+    "subcategory": "",
+    "source": "owasp_api",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Security misconfiguration is commonly a result of unsecure default configurations, incomplete or ad-hoc configurations, open cloud storage, misconfigured HTTP headers, unnecessary HTTP methods, permissive Cross-Origin Resource Sharing (CORS), and verbose error messages containing sensitive information.",
+      "it": "Una security misconfiguration è il risultato di configurazioni predefinite non sicure, configurazioni incomplete o ad hoc, cloud storage non protetti, intestazioni HTTP non configurate correttamente, metodi HTTP non necessari, Cross-Origin Resource Sharing (CORS) permissive e messaggi di errore verbosi contenenti informazioni sensibili."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to harden configurations across all layers, disable unnecessary features and apply security patches.",
+      "it": "Si consiglia di rafforzare le configurazioni su tutti i livelli, disabilitare le funzionalità non necessarie ed applicare le patch di sicurezza."
+    },
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa8-security-misconfiguration/"
+    ]
+  },
+  {
+    "identifier": "API10:2023",
+    "name": "Unsafe Consumption of APIs",
+    "subcategory": "",
+    "source": "owasp_api",
+    "languages_order": ["en", "it"],
+    "generic_description": {
+      "en": "Unsafe Consumption of APIs occurs when developers trust external or third-party APIs without proper validation or security assessment. This can lead to security risks such as injection attacks, data exposure, or compromise through vulnerable third-party services, impacting the security of the consuming application.",
+      "it": "Il consumo non sicuro delle API si verifica quando gli sviluppatori si fidano di API esterne o di terze parti senza una corretta validazione o valutazione della sicurezza. Questo può causare rischi come manipolazione di codice, esposizione di dati o compromissione tramite servizi terzi vulnerabili, mettendo a rischio la sicurezza dell'applicazione utilizzatrice."
+    },
+    "generic_remediation": {
+      "en": "It is recommended to validate and sanitize data received from third-party APIs.",
+      "it": "Si consiglia di convalidare e sanificare i dati ricevuti da API di terze parti."
+    },
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xaa-unsafe-consumption-of-apis/"
+    ]
+  }
+]
