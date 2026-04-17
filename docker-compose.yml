@@ -1,0 +1,103 @@
+services:
+    db:
+        image: mongo
+        container_name: kryvea-db
+        restart: unless-stopped
+        environment:
+            - MONGO_INITDB_ROOT_USERNAME=kryveauser
+            - MONGO_INITDB_ROOT_PASSWORD=kryveapass
+        command:
+            [
+                "mongod",
+                "--replSet",
+                "rs0",
+                "--bind_ip_all",
+                "--keyFile",
+                "/data/replica.key",
+                "--auth",
+            ]
+        entrypoint:
+            - bash
+            - -c
+            - |
+                if [ ! -f "/data/replica.key" ]; then
+                    openssl rand -base64 768 > "/data/replica.key"
+                fi
+                chmod 400 /data/replica.key
+                chown 999:999 /data/replica.key
+                exec docker-entrypoint.sh "$$@"
+        volumes:
+            - ./.data/mongodb:/data/db
+        networks:
+            - kryvea-data
+        expose:
+            - 27017
+
+    db-init:
+        image: mongo
+        depends_on:
+            - db
+        command:
+            - bash
+            - -c
+            - |
+                until mongosh "mongodb://kryveauser:kryveapass@db:27017/admin" --eval '
+                    try {
+                        rs.status();
+                    } catch (e) {
+                        rs.initiate({
+                            _id: "rs0",
+                            members: [{ _id: 0, host: "db:27017" }]
+                        });
+                    }
+                ' &>/dev/null; do
+                    sleep 2;
+                done
+        networks:
+            - kryvea-data
+
+    app:
+        build: app
+        container_name: kryvea-app
+        restart: unless-stopped
+        environment:
+            - KRYVEA_ADDR=0.0.0.0:8080
+            - KRYVEA_ROOT_PATH=/
+            - KRYVEA_MONGO_URI=mongodb://kryveauser:kryveapass@kryvea-db:27017/?replicaSet=rs0
+            - KRYVEA_ADMIN_USER=kryvea
+            - KRYVEA_ADMIN_PASS=kryveapassword
+            - KRYVEA_LOG_DIRECTORY=/var/log/kryvea/
+            - KRYVEA_LOG_MAX_SIZE_MB=10
+            - KRYVEA_LOG_MAX_BACKUPS=5
+            - KRYVEA_LOG_MAX_AGE_DAYS=0
+            - KRYVEA_LOG_COMPRESS=true
+        volumes:
+            - ./.data/log:/var/log/kryvea/
+        depends_on:
+            db-init:
+                condition: service_completed_successfully
+        networks:
+            - kryvea-net
+            - kryvea-data
+        expose:
+            - 8080
+
+    web:
+        build: web
+        container_name: kryvea-web
+        restart: unless-stopped
+        volumes:
+            - ./.data/ssl:/etc/nginx/ssl
+        depends_on:
+            - db
+            - app
+        ports:
+            - 443:443
+        networks:
+            - kryvea-net
+
+networks:
+    kryvea-net:
+        driver: bridge
+    kryvea-data:
+        driver: bridge
