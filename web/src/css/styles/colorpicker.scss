@@ -1,0 +1,42 @@
+.sketch-picker, .chrome-picker {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+  border-radius: 1.5rem !important;
+  font-family: 'Courier New', Courier, monospace !important;
+}
+
+.sketch-picker input, 
+.chrome-picker input {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-radius: 0.5rem !important;
+}
+
+.sketch-picker label, 
+.chrome-picker label {
+  color: var(--text-primary) !important;
+}
+
+.sketch-picker .flexbox-fix,
+.chrome-picker .flexbox-fix {
+  background: var(--bg-primary) !important;
+  border-radius: 4px;
+}
+
+.chrome-picker svg {
+  fill: var(--text-primary) !important;
+  background-color: var(--bg-primary) !important;
+}
+
+div[style*="cursor: pointer"]:hover svg {
+  fill: var(--link) !important;
+}
+
+/* For preset colors if used */
+.sketch-picker .preset-colors > div,
+.chrome-picker .preset-colors > div {
+  background: var(--bg-primary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 4px;
+}
+

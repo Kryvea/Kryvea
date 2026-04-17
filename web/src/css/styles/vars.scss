@@ -1,0 +1,154 @@
+// Variables for Light and Dark Themes
+@use "sass:color";
+
+$main-max-width: 1735px !default;
+
+// Light Theme
+:root {
+  --main-max-width: #{$main-max-width};
+  --textarea-resizer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctitle%3Eresize-bottom-right%3C/title%3E%3Cpath d='M22,22H20V20H22V22M22,18H20V16H22V18M18,22H16V20H18V22M18,18H16V16H18V18M14,22H12V20H14V22M22,14H20V12H22V14Z' fill='black' /%3E%3C/svg%3E");
+
+  /* Palette */
+  $bg-primary: #f0f0f0;
+  $text-primary: #3d3b43;
+  $border: #4f4f4f;
+  $link: #127a81;
+  $button-bg: color.adjust($link, $lightness: -3%);
+  $clickable-hover-backdrop-brightness: 0.8;
+  $clickable-active-backdrop-brightness: 0.5;
+
+  /* Maps */
+  $backgrounds: (
+    "primary": $bg-primary,
+    "secondary": color.adjust($bg-primary, $lightness: 2%),
+    "tertiary": color.adjust($bg-primary, $lightness: 4%),
+    "quaternary": color.adjust($bg-primary, $lightness: 0%),
+    "quinary": color.adjust($bg-primary, $lightness: -2%),
+    "active": color.adjust($bg-primary, $lightness: -10%),
+  );
+
+  /* Text */
+  --text-primary: #{$text-primary};
+  --text-secondary: #{color.adjust($text-primary, $lightness: 40%)};
+  --text-disabled: #{color.adjust($text-primary, $lightness: -55%)};
+
+  /* Borders and Dividers */
+  --border-primary: #{color.adjust($border, $alpha: -0.8)};
+  --border-primary-highlight: #{color.adjust($border, $alpha: -0.6)};
+  --border-secondary: #{color.adjust($border, $alpha: -0.9)};
+  --border-secondary-highlight: #{color.adjust($border, $alpha: -0.8)};
+
+  /* Links */
+  --link: #{$link};
+  --link-hover: #{color.adjust($link, $lightness: 10%)};
+
+  /* Buttons */
+  $buttons: (
+    "bg": $button-bg,
+    "bg-secondary": color.adjust($bg-primary, $lightness: -7%),
+    "bg-tertiary": color.adjust($bg-primary, $lightness: -36%),
+  );
+
+  /* Alerts */
+  $error: #ff0033;
+  --error: #{$error};
+  --error-rgb: #{color.channel($error, "red")}, #{color.channel($error, "green")}, #{color.channel($error, "blue")};
+
+  $warning: #fdc700;
+  --warning: #{$warning};
+  --warning-rgb:
+    #{color.channel($warning, "red")}, #{color.channel($warning, "green")}, #{color.channel($warning, "blue")};
+
+  /* Clickable CSS class */
+  --clickable-hover-backdrop-brightness: #{$clickable-hover-backdrop-brightness};
+  --clickable-active-backdrop-brightness: #{$clickable-active-backdrop-brightness};
+
+  /* Backgrounds: hex and RGB */
+  @each $name, $color in $backgrounds {
+    --bg-#{$name}: #{$color};
+    --bg-#{$name}-rgb:
+      #{color.channel($color, "red")}, #{color.channel($color, "green")}, #{color.channel($color, "blue")};
+  }
+
+  /* Buttons: hex and RGB */
+  @each $name, $color in $buttons {
+    --button-#{$name}: #{$color};
+    --button-#{$name}-rgb:
+      #{color.channel($color, "red")}, #{color.channel($color, "green")}, #{color.channel($color, "blue")};
+  }
+}
+
+// Dark Theme
+html.dark {
+  --textarea-resizer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctitle%3Eresize-bottom-right%3C/title%3E%3Cpath d='M22,22H20V20H22V22M22,18H20V16H22V18M18,22H16V20H18V22M18,18H16V16H18V18M14,22H12V20H14V22M22,14H20V12H22V14Z' fill='white' /%3E%3C/svg%3E");
+
+  /* Palette */
+  $bg-primary: #161616;
+  $text-primary: #e0e0e0;
+  $border: #a0a0a0;
+  $link: #ee9f27;
+  $button-bg: color.adjust($link, $lightness: -12%);
+  $clickable-hover-backdrop-brightness: 0.8;
+  $clickable-active-backdrop-brightness: 0.5;
+
+  /* Maps */
+  $backgrounds: (
+    "primary": $bg-primary,
+    "secondary": color.adjust($bg-primary, $lightness: 5%),
+    "tertiary": color.adjust($bg-primary, $lightness: 10%),
+    "quaternary": color.adjust($bg-primary, $lightness: 20%),
+    "quinary": color.adjust($bg-primary, $lightness: 30%),
+    "active": color.adjust($bg-primary, $lightness: 60%),
+  );
+
+  /* Text */
+  --text-primary: #{$text-primary};
+  --text-secondary: #{color.adjust($text-primary, $lightness: -25%)};
+  --text-disabled: #{color.adjust($text-primary, $lightness: -55%)};
+
+  /* Borders and Dividers */
+  --border-primary: #{color.adjust($border, $alpha: -0.8)};
+  --border-primary-highlight: #{color.adjust($border, $alpha: -0.6)};
+  --border-secondary: #{color.adjust($border, $alpha: -0.9)};
+  --border-secondary-highlight: #{color.adjust($border, $alpha: -0.7)};
+  --border-active: #{color.adjust($border, $lightness: 20%)};
+
+  /* Links */
+  --link: #{$link};
+  --link-hover: #{color.adjust($link, $lightness: -10%)};
+
+  /* Buttons */
+  $buttons: (
+    "bg": $button-bg,
+    "bg-secondary": color.adjust($bg-primary, $lightness: 5%),
+    "bg-tertiary": color.adjust($text-primary, $lightness: -36%),
+  );
+
+  /* Alerts */
+  $error: #ff4d4d;
+  --error: #{$error};
+  --error-rgb: #{color.channel($error, "red")}, #{color.channel($error, "green")}, #{color.channel($error, "blue")};
+
+  $warning: #daa520;
+  --warning: #{$warning};
+  --warning-rgb:
+    #{color.channel($warning, "red")}, #{color.channel($warning, "green")}, #{color.channel($warning, "blue")};
+
+  /* Clickable CSS class */
+  --clickable-hover-backdrop-brightness: #{$clickable-hover-backdrop-brightness};
+  --clickable-active-backdrop-brightness: #{$clickable-active-backdrop-brightness};
+
+  /* Backgrounds: hex and RGB */
+  @each $name, $color in $backgrounds {
+    --bg-#{$name}: #{$color};
+    --bg-#{$name}-rgb:
+      #{color.channel($color, "red")}, #{color.channel($color, "green")}, #{color.channel($color, "blue")};
+  }
+
+  /* Buttons: hex and RGB */
+  @each $name, $color in $buttons {
+    --button-#{$name}: #{$color};
+    --button-#{$name}-rgb:
+      #{color.channel($color, "red")}, #{color.channel($color, "green")}, #{color.channel($color, "blue")};
+  }
+}

@@ -1,0 +1,54 @@
+div:has(table) {
+  @apply show-scrollbar;
+}
+
+table thead {
+  background-color: rgba(var(--bg-quinary-rgb), 0.6);
+}
+
+table th {
+  @apply text-nowrap border-none px-4 py-2 text-left;
+}
+
+table tr {
+  @apply border-b;
+  border-color: var(--border-primary);
+
+  &:first-child:not(:last-child) {
+    border-top: 1px solid var(--border-primary);
+  }
+
+  td[data-buttons-cell] {
+    background-color: var(--bg-tertiary);
+  }
+}
+
+table tbody tr:hover {
+  backdrop-filter: brightness(0.9);
+
+  td[data-buttons-cell] {
+    filter: brightness(0.9);
+  }
+}
+
+table td {
+  @apply px-4 py-2;
+  width: max-content;
+
+  &:empty::after {
+    content: "N/A";
+    font-weight: 100;
+    color: var(--border-primary-highlight);
+  }
+}
+
+table td:has(div:has(.select-wrapper__control)) {
+  min-width: max-content;
+  will-change: contents;
+}
+
+.vulnerability-detail-cvss-table {
+  td:empty {
+    text-align: center;
+  }
+}

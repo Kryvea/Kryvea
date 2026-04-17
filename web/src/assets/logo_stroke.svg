@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #f98f45;
+      }
+
+      .cls-1, .cls-2, .cls-3, .cls-4 {
+        fill-rule: evenodd;
+      }
+
+      .cls-2 {
+        fill: #ee9f27;
+      }
+
+      .cls-3 {
+        fill: #12908e;
+      }
+
+      .cls-4 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <path id="Colore_riempimento_7" data-name="Colore riempimento 7" class="cls-1" d="M355.856,951.952V614.114l84.084-63.063L750.751,903.9S575.747,1023.07,355.856,951.952Z"/>
+  <path id="Colore_riempimento_8" data-name="Colore riempimento 8" class="cls-1" d="M851.351,818.318l-300.3-346.847L885.886,225.225S1107.99,522.241,851.351,818.318Z"/>
+  <path id="Colore_riempimento_10" data-name="Colore riempimento 10" class="cls-2" d="M851.351,818.318l-300.3-346.847L885.886,225.225S1107.99,522.241,851.351,818.318ZM356,952V614l84-63L750,903S578.231,1022.49,356,952Z"/>
+  <path id="Colore_riempimento_5" data-name="Colore riempimento 5" class="cls-3" d="M214.715,126.126V879.88S27.841,755.436,25.526,497s189.19-375.375,189.19-375.375v4.5ZM355.856,49.55v397.9L788.288,126.126S618.767-30.186,355.856,49.55Z"/>
+  <path id="bordi_sotto" data-name="bordi sotto" class="cls-4" d="M851,820L549,470,886,224S1110.01,523.991,851,820ZM355,953V614l85-64L752,904S577.131,1024.29,355,953ZM851,793L575,475,881,249S1076.56,519.415,851,793ZM726,899L438,573l-67,50V939S533.2,1003.77,726,899Z"/>
+  <path id="bordi_sopra" data-name="bordi sopra" class="cls-4" d="M215,880.694C214.73,879.924,27.275,757.215,25,497,21.962,238.664,215,121,215,121ZM355,49V449L790,126S618.005-32.05,355,49ZM200,848V152S40.951,275.762,40,494,217.611,864.511,200,848ZM371,62V416L761,126S598.256-5.308,371,62Z"/>
+</svg>

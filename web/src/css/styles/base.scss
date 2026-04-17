@@ -1,0 +1,313 @@
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+a {
+  color: var(--link);
+}
+a:hover {
+  color: var(--link-hover);
+}
+
+button {
+  @apply rounded border border-white/0 px-4 py-2;
+  background-color: var(--button-bg);
+  color: #ffffff;
+}
+button[disabled] {
+  @apply cursor-not-allowed;
+
+  &:hover {
+    filter: none;
+  }
+}
+button[data-small] {
+  @apply px-3 py-1 text-sm;
+}
+button[data-variant="secondary"] {
+  border: 1px solid var(--border-primary);
+  background-color: transparent;
+  color: var(--text-primary);
+}
+button[data-variant="tertiary"] {
+  background-color: var(--button-bg-tertiary);
+  color: #ffffff;
+}
+button[data-variant="selected"] {
+  border-color: var(--border-active);
+}
+button[data-variant="warning"] {
+  background-color: var(--warning);
+}
+button[data-variant="danger"] {
+  background-color: var(--error);
+}
+button[data-variant="outline-only"] {
+  border: 1px solid var(--border-primary-highlight);
+  background-color: transparent;
+  color: var(--text-primary);
+}
+button[data-variant="transparent"] {
+  background-color: transparent;
+  color: var(--text-primary);
+}
+html.dark {
+  button[data-small] {
+    color: var(--text-primary);
+  }
+
+  button[data-variant="secondary"] {
+    background-color: rgba(var(--button-bg-secondary-rgb), 0.8);
+  }
+}
+
+input {
+  @apply rounded-md border p-2 ring-0;
+  outline: none;
+  border-color: transparent;
+  height: min-content;
+  background-color: var(--bg-quaternary);
+}
+input::placeholder {
+  color: var(--text-secondary);
+  font-weight: 100;
+  font-style: normal;
+}
+input:focus {
+  border: 1px solid var(--border-primary);
+}
+input.checkbox {
+  accent-color: var(--link);
+}
+
+textarea {
+  @apply rounded-md p-1 px-2;
+  scrollbar-gutter: stable;
+  background-color: var(--bg-quaternary);
+  border: 1px solid #00000000;
+}
+textarea:focus {
+  outline: none;
+  border: 1px solid var(--border-primary);
+}
+textarea::placeholder {
+  color: var(--text-secondary);
+  font-weight: 100;
+  font-style: normal;
+}
+textarea::-webkit-scrollbar {
+  display: block;
+  width: 15px;
+}
+textarea::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb:hover {
+  background-color: transparent;
+}
+textarea::-webkit-scrollbar-corner {
+  background: var(--bg-quaternary);
+}
+textarea::-webkit-resizer {
+  background-color: transparent;
+  background-image: var(--textarea-resizer);
+}
+
+.cardbox {
+  @apply rounded-3xl p-4;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+
+  .cardbox table {
+    background-color: var(--bg-tertiary);
+
+    tbody tr {
+      background-color: var(--bg-quaternary);
+
+      &:hover {
+        filter: brightness(0.9);
+        border-bottom: 1px solid var(--border-primary-highlight);
+
+        td[data-buttons-cell] {
+          filter: brightness(1);
+        }
+      }
+    }
+
+    thead tr {
+      background-color: var(--bg-quinary);
+    }
+
+    td[data-buttons-cell] {
+      background-color: var(--bg-quaternary);
+      border-bottom: 1px solid var(--border-primary-highlight);
+    }
+  }
+
+  .cardbox:not(.no-highlight) {
+    background-color: rgba(var(--bg-quaternary-rgb), 0.35);
+
+    .cardbox {
+      background-color: rgba(var(--bg-quaternary-rgb), 0.7);
+    }
+  }
+}
+
+.card-modal {
+  background-image: linear-gradient(
+    to bottom right,
+    rgba(var(--bg-primary-rgb), 0.85),
+    rgba(var(--bg-tertiary-rgb), 0.85),
+    rgba(var(--bg-quaternary-rgb), 0.85)
+  );
+}
+
+.divider {
+  @apply my-2;
+  border-color: var(--border-primary);
+}
+.divider[data-no-margin] {
+  @apply my-0;
+}
+
+.heart {
+  @apply inline-block h-4 w-4 align-middle text-red-500;
+  transition: transform 160ms ease;
+}
+.heart.heart-up {
+  --y: -70%;
+  transform: translate3d(0, var(--y), 0) scale(1.8);
+}
+.heart.beating {
+  animation: heartbeat 0.3s ease;
+}
+.heart.explode {
+  animation: explodeAnim 0.5s forwards;
+}
+
+@keyframes heartbeat {
+  0%,
+  100% {
+    transform: translate3d(0, var(--y), 0) scale(1.8);
+  }
+  50% {
+    transform: translate3d(0, var(--y), 0) scale(2.8);
+  }
+}
+
+@keyframes explodeAnim {
+  to {
+    transform: translate3d(0, var(--y), 0) scale(5) rotate(900deg);
+    opacity: 0;
+  }
+}
+
+@keyframes rotateFadeIn {
+  0% {
+    opacity: 0;
+    transform: rotate(0deg) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+.rotateFadeIn {
+  animation: rotateFadeIn 0.5s cubic-bezier(0, 0, 0.6, 1) forwards;
+}
+
+.clickable {
+  &:hover {
+    filter: brightness(0.9);
+  }
+  &:active {
+    filter: brightness(0.8);
+  }
+
+  &[data-variant="outline-only"],
+  &[data-variant="transparent"] {
+    &:hover {
+      backdrop-filter: brightness(var(--clickable-hover-backdrop-brightness));
+    }
+    &:active {
+      backdrop-filter: brightness(var(--clickable-active-backdrop-brightness));
+    }
+  }
+}
+
+.glasscard {
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  background-image: linear-gradient(to top left, rgba(var(--bg-primary-rgb), 0.5), rgba(var(--bg-secondary-rgb), 0.5));
+  border: 1px solid var(--border-primary);
+}
+
+.shimmer-wrapper {
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-primary);
+  overflow: hidden;
+  border-radius: 4px;
+  position: relative;
+  animation: shimmerWrapper 1.5s infinite;
+  opacity: 30%;
+}
+
+.shimmer {
+  left: -150px;
+  height: 100%;
+  width: 150px;
+  // prettier-ignore
+  background: linear-gradient(
+        130deg,
+        rgba(white, 0),
+        rgba(white, 0.7),
+        rgba(white, 0)
+      );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0%;
+    transform: translateX(-150px);
+  }
+  50% {
+    opacity: 100%;
+  }
+  100% {
+    opacity: 0%;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes shimmerWrapper {
+  0% {
+    filter: brightness(100%);
+  }
+  50% {
+    filter: brightness(80%);
+  }
+  100% {
+    filter: brightness(100%);
+  }
+}
+
+@keyframes shimmerWrapperDark {
+  0% {
+    filter: brightness(70%);
+  }
+  50% {
+    filter: brightness(85%);
+  }
+  100% {
+    filter: brightness(70%);
+  }
+}
+
+html.dark {
+  .shimmer-wrapper {
+    background-color: var(--bg-quinary);
+    animation: shimmerWrapperDark 1.5s infinite;
+  }
+}

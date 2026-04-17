@@ -1,0 +1,104 @@
+.RichText {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.RichText-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.RichText-editor-content {
+  background-color: rgba(var(--bg-primary-rgb), 0.4);
+  min-height: 200px;
+  height: 600px;
+  max-height: 600px;
+  border: 1px solid var(--border-secondary-highlight);
+  padding: 1rem;
+  border-radius: 4px;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+
+/* Optional: Make code blocks nicer */
+.RichText-editor-content pre {
+  background-color: var(--bg-secondary);
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: 4px;
+}
+
+.RichText-editor-content blockquote {
+  border-left: 4px solid rgba(var(--bg-primary-rgb), 0.65);
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.tiptap.ProseMirror:focus {
+  outline: none;
+}
+
+/* Headings */
+.RichText-editor-content h1 {
+  font-size: 2rem;
+  font-weight: bold;
+}
+.RichText-editor-content h2 {
+  font-size: 1.75rem;
+  font-weight: bold;
+}
+.RichText-editor-content h3 {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+.RichText-editor-content h4 {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+.RichText-editor-content h5 {
+  font-size: 1rem;
+  font-weight: bold;
+}
+.RichText-editor-content h6 {
+  font-size: 0.875rem;
+  font-weight: bold;
+}
+
+/* Lists */
+.RichText-editor-content ul {
+  list-style-type: disc;
+  margin-left: 1.5rem;
+}
+.RichText-editor-content ol {
+  list-style-type: decimal;
+  margin-left: 1.5rem;
+}
+.RichText-editor-content li {
+  margin-bottom: 0.25rem;
+}
+
+.RichText-editor-content table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Table */
+.RichText-editor-content th,
+.RichText-editor-content td {
+  border: 1px solid var(--border-primary);
+  padding: 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.RichText-editor-content thead {
+  font-weight: bold;
+}
+
+.RichText-editor-content tr {
+  border-color: var(--border-primary);
+}

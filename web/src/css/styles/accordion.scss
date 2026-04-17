@@ -1,0 +1,37 @@
+.accordion-container {
+  width: 100%;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  border-color: transparent;
+  background-color: var(--bg-quaternary);
+
+  &:hover .arrow {
+    filter: brightness(1.2);
+  }
+}
+.wrapper {
+  overflow: hidden;
+}
+.wrapper .question-container {
+  width: 100%;
+  padding: 0px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 500;
+  font-size: 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.wrapper .arrow {
+  transition: transform 0.5s ease-in-out;
+  color: var(--text-secondary);
+}
+.arrow.active {
+  transform: rotate(180deg);
+}
+.wrapper .answer-container {
+  transition: height 0.4s ease-in-out;
+}
