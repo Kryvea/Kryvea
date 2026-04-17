@@ -1,0 +1,62 @@
+[
+  {
+    "id": "Vulnerabilities",
+    "translation": "Vulnerabilità"
+  },
+  {
+    "id": "CVSSv3.1 Severity",
+    "translation": "Severità CVSSv3.1"
+  },
+  {
+    "id": "CVSSv4.0 Severity",
+    "translation": "Severità CVSSv4.0"
+  },
+  {
+    "id": "CVSSv3.1 Vector",
+    "translation": "Vettore CVSSv3.1"
+  },
+  {
+    "id": "CVSSv4.0 Vector",
+    "translation": "Vettore CVSSv4.0"
+  },
+  {
+    "id": "CVSSv3.1 Score",
+    "translation": "Punteggio CVSSv3.1"
+  },
+  {
+    "id": "CVSSv4.0 Score",
+    "translation": "Punteggio CVSSv4.0"
+  },
+  {
+    "id": "Status",
+    "translation": "Stato"
+  },
+  {
+    "id": "Name",
+    "translation": "Nome"
+  },
+  {
+    "id": "Description",
+    "translation": "Descrizione"
+  },
+  {
+    "id": "Introduction",
+    "translation": "Introduzione"
+  },
+  {
+    "id": "Version",
+    "translation": "Versione"
+  },
+  {
+    "id": "Remediations",
+    "translation": "Azioni di rientro"
+  },
+  {
+    "id": "References",
+    "translation": "Referenze"
+  },
+  {
+    "id": "Notes",
+    "translation": "Note"
+  }
+]
