@@ -1,0 +1,57 @@
+.vuln-detail-req-res-body {
+  @apply max-h-[calc(100vh-200px)] flex-1 overflow-x-auto rounded-md p-4;
+  background-color: var(--bg-quaternary);
+
+  code {
+    letter-spacing: 0.025rem;
+  }
+}
+
+.vuln-detail-req-res-header {
+  @apply mb-3 flex gap-8 border-b pb-1 text-lg font-semibold;
+  border-color: var(--border-primary);
+}
+
+.dragging,
+.dragging .poc-template {
+  cursor: not-allowed !important;
+}
+.dragging .poc-template[data-type="image"] .drop-image-over-hinter {
+  @apply absolute left-0 top-0 flex h-full w-full animate-pulse bg-[color:--bg-secondary] opacity-30;
+}
+.drop-image-over-hinter {
+  @apply hidden items-center justify-center rounded-3xl border-2 border-dashed;
+  font-size: 1.75rem;
+  color: var(--text-secondary);
+}
+
+.vuln-detail-poc-img {
+  @apply max-h-[550px] max-w-[1/2];
+}
+
+.vuln-detail-poc-text {
+  @apply flex-1 overflow-x-auto rounded-md p-4 font-mono;
+  background-color: var(--bg-quaternary);
+}
+
+.poc-template {
+  @apply cardbox relative flex flex-col gap-4 border p-6;
+  border-color: var(--border-primary);
+  background-color: var(--bg-tertiary);
+
+  &[data-focused="true"] {
+    border-color: var(--link);
+  }
+}
+
+.poc-template.dragged-over {
+  &[data-type="image"] {
+    filter: brightness(1.35);
+  }
+}
+
+.edit-poc-header {
+  @apply glasscard sticky top-0 z-10 rounded-b-3xl;
+  border: none;
+  background-image: linear-gradient(to bottom, var(--bg-primary), rgba(var(--bg-secondary-rgb), 0.5));
+}

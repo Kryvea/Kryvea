@@ -1,0 +1,38 @@
+@use "sass:color";
+
+.kryvea-toast {
+  @apply clickable;
+
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+
+  &.Toastify__toast--error {
+    border: 1px solid rgba(var(--error-rgb), 0.2);
+  }
+
+  &.Toastify__toast--success {
+    border: 1px solid var(--border-primary);
+  }
+
+  // loading
+  &.Toastify__toast--default {
+    border: 2px solid var(--border-primary);
+  }
+
+  &.Toastify__toast--warning {
+    border: 1px solid rgba(var(--warning-rgb), 0.2);
+  }
+
+  .Toastify__close-button {
+    transition: none;
+    color: var(--text-secondary);
+    opacity: 0.6;
+  }
+
+  &:hover {
+    .Toastify__close-button {
+      color: var(--text-primary);
+      opacity: 1;
+    }
+  }
+}

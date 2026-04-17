@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #f98f45;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        fill-rule: evenodd;
+      }
+
+      .cls-2 {
+        fill: #ee9f27;
+      }
+
+      .cls-3 {
+        fill: #12908e;
+      }
+    </style>
+  </defs>
+  <path id="Colore_riempimento_7" data-name="Colore riempimento 7" class="cls-1" d="M355.856,951.952V614.114l84.084-63.063L750.751,903.9S575.747,1023.07,355.856,951.952Z"/>
+  <path id="Colore_riempimento_8" data-name="Colore riempimento 8" class="cls-1" d="M851.351,818.318l-300.3-346.847L885.886,225.225S1107.99,522.241,851.351,818.318Z"/>
+  <path id="Colore_riempimento_10" data-name="Colore riempimento 10" class="cls-2" d="M851.351,818.318l-300.3-346.847L885.886,225.225S1107.99,522.241,851.351,818.318ZM356,952V614l84-63L750,903S578.231,1022.49,356,952Z"/>
+  <path id="Colore_riempimento_5" data-name="Colore riempimento 5" class="cls-3" d="M214.715,126.126V879.88S27.841,755.436,25.526,497s189.19-375.375,189.19-375.375v4.5ZM355.856,49.55v397.9L788.288,126.126S618.767-30.186,355.856,49.55Z"/>
+</svg>

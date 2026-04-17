@@ -1,0 +1,33 @@
+::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+  display: none;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--link-hover);
+  border-radius: 1.5rem;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--link-hover);
+  border-width: 1px;
+}
+
+.hide-scrollbar {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.show-scrollbar {
+  ::-webkit-scrollbar {
+    display: block;
+  }
+}
