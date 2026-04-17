@@ -15,13 +15,13 @@
 
 ## 📖 Documentation
 
-**Full documentation is available at: [Kryvea Documentation](https://kryvea.github.io/docs/)**
+**Full documentation is available at: [Kryvea Documentation](https://kryvea.github.io/)**
 
-- **[Installation Guide](https://kryvea.github.io/docs/installation)** - Setup and deployment
-- **[Usage Guide](https://kryvea.github.io/docs/usage)** - Complete workflow walkthrough
-- **[Templating Guide](https://kryvea.github.io/docs/templating)** - Custom report templates
-- **[Configuration](https://kryvea.github.io/docs/configuration)** - Advanced settings
-- **[Troubleshooting](https://kryvea.github.io/docs/troubleshooting)** - Common issues & solutions
+- **[Installation Guide](https://kryvea.github.io/installation)** - Setup and deployment
+- **[Usage Guide](https://kryvea.github.io/usage)** - Complete workflow walkthrough
+- **[Templating Guide](https://kryvea.github.io/templating)** - Custom report templates
+- **[Configuration](https://kryvea.github.io/configuration)** - Advanced settings
+- **[Troubleshooting](https://kryvea.github.io/troubleshooting)** - Common issues & solutions
 
 ## 🌟 Overview
 
@@ -38,7 +38,7 @@
 
 ```bash
 git clone https://github.com/Kryvea/Kryvea.git
-cd kryvea
+cd Kryvea
 docker compose up
 ```
 
@@ -48,7 +48,7 @@ docker compose up
 
 **That's it!** The first startup will build the images and initialize the database.
 
-> **For detailed installation instructions, see [Installation Guide](https://kryvea.github.io/docs/installation)**
+> **For detailed installation instructions, see [Installation Guide](https://kryvea.github.io/installation)**
 
 ### UI
 
@@ -56,8 +56,8 @@ Supporting Light and Dark theme
 
 <p align="center">
     <picture>
-      <img width="900px" src="docs/public/images/light_mode.png" alt="Light mode" />
-      <img width="900px" src="docs/public/images/dark_mode.png" alt="Dark mode" />
+      <img width="900px" src="https://raw.githubusercontent.com/Kryvea/kryvea.github.io/refs/heads/main/public/images/light_mode.png" alt="Light mode" />
+      <img width="900px" src="https://raw.githubusercontent.com/Kryvea/kryvea.github.io/refs/heads/main/public/images/dark_mode.png" alt="Dark mode" />
     </picture>
 </p>
 
@@ -65,7 +65,7 @@ Supporting Light and Dark theme
 
 ## 📋 Usage
 
-> **For complete usage guide, see [Usage Documentation](https://kryvea.github.io/docs/usage)**
+> **For complete usage guide, see [Usage Documentation](https://kryvea.github.io/usage)**
 
 ---
 
@@ -79,7 +79,7 @@ See [LICENSE](LICENSE) file for details.
 
 - **[Discussions](https://github.com/Kryvea/Kryvea/discussions)** - Ask questions, share ideas
 - **[Issues](https://github.com/Kryvea/Kryvea/issues)** - Report bugs, request features
-- **[Documentation](https://kryvea.github.io/docs/)** - Complete guides and references
+- **[Documentation](https://kryvea.github.io/)** - Complete guides and references
 
 ---
 

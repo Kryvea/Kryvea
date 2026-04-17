@@ -17,5 +17,3 @@ __pycache__/
 
 *.burp*
 
-docs/.vitepress/cache
-docs/.vitepress/dist
