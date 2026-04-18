@@ -13,8 +13,9 @@ import (
 )
 
 type customerRequestData struct {
-	Name     string `json:"name"`
-	Language string `json:"language"`
+	Name          string   `json:"name"`
+	Language      string   `json:"language"`
+	AssignedUsers []string `json:"assigned_users"`
 }
 
 func (d *Driver) AddCustomer(c *fiber.Ctx) error {
@@ -77,6 +78,18 @@ func (d *Driver) AddCustomer(c *fiber.Ctx) error {
 			}
 
 			return uuid.Nil, errors.New("Cannot create customer")
+		}
+
+		for _, assignedUserStr := range data.AssignedUsers {
+			assignedUser, errStr := d.userFromParam(assignedUserStr)
+			if errStr != "" {
+				return nil, errors.New(errStr)
+			}
+
+			err := d.mongo.User().AssignCustomer(ctx, assignedUser.ID, customerID)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		return customerID, nil
