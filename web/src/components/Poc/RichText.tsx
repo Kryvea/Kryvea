@@ -38,6 +38,7 @@ import {
 } from "@mdi/js";
 import Color from "@tiptap/extension-color";
 import { Highlight } from "@tiptap/extension-highlight";
+import Image from '@tiptap/extension-image';
 import Placeholder from "@tiptap/extension-placeholder";
 import { Table } from "@tiptap/extension-table";
 import TableCell from "@tiptap/extension-table-cell";
@@ -63,6 +64,7 @@ const extensions = [
   TextStyle,
   Color,
   Highlight.configure({ multicolor: true }),
+  Image,
   ImageResize,
   Table.configure({ resizable: true }),
   TableRow,
