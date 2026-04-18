@@ -399,6 +399,21 @@ func (ui *UserIndex) UpdateOwnedAssessment(ctx context.Context, userID, assessme
 	return err
 }
 
+func (ui *UserIndex) AssignCustomer(ctx context.Context, userID, customerID uuid.UUID) error {
+	filter := bson.M{"_id": userID}
+
+	update := bson.M{
+		"$addToSet": bson.M{
+			"customers": bson.M{
+				"_id": customerID,
+			},
+		},
+	}
+
+	_, err := ui.collection.UpdateOne(ctx, filter, update)
+	return err
+}
+
 // Delete removes a user and its references from vulnerabilities
 //
 // Requires transactional context to ensure data integrity
