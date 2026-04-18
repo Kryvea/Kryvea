@@ -1,4 +1,5 @@
 import { mdiPencil } from "@mdi/js";
+import Image from '@tiptap/extension-image';
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import React from "react";
@@ -33,7 +34,7 @@ export default function PocRichText({
   const textInputId = `poc-richtext-${currentIndex}-${pocDoc.key}`;
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [StarterKit, Image],
     content: pocDoc.rich_text_data || "",
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
