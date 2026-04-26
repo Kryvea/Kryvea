@@ -245,8 +245,26 @@ func (pi *PocIndex) GetByImageID(ctx context.Context, imageID uuid.UUID) ([]Poc,
 //
 // Requires transactional context to ensure data integrity
 func (pi *PocIndex) DeleteByVulnerabilityID(ctx context.Context, vulnerabilityID uuid.UUID) error {
-	// TODO: add deletion of FileReferences
-	_, err := pi.collection.DeleteOne(ctx, bson.M{"vulnerability_id": vulnerabilityID})
+	poc, err := pi.GetByVulnerabilityID(ctx, vulnerabilityID)
+	if err != nil && err != mongo.ErrNoDocuments {
+		return err
+	}
+
+	imageIDs := make(map[uuid.UUID]struct{}, len(poc.Pocs))
+	for _, pocItem := range poc.Pocs {
+		if _, exists := imageIDs[pocItem.ImageID]; exists {
+			continue
+		}
+
+		err = pi.driver.FileReference().PullUsedBy(ctx, pocItem.ImageID, poc.ID)
+		if err != nil {
+			return err
+		}
+
+		imageIDs[pocItem.ImageID] = struct{}{}
+	}
+
+	_, err = pi.collection.DeleteOne(ctx, bson.M{"vulnerability_id": vulnerabilityID})
 	return err
 }
 
@@ -255,7 +273,27 @@ func (pi *PocIndex) DeleteByVulnerabilityID(ctx context.Context, vulnerabilityID
 //
 // Requires transactional context to ensure data integrity
 func (pi *PocIndex) DeleteManyByVulnerabilityID(ctx context.Context, vulnerabilityIDs []uuid.UUID) error {
-	// TODO: add deletion of FileReferences
+	for _, vulnerabilityID := range vulnerabilityIDs {
+		poc, err := pi.GetByVulnerabilityID(ctx, vulnerabilityID)
+		if err != nil && err != mongo.ErrNoDocuments {
+			return err
+		}
+
+		imageIDs := make(map[uuid.UUID]struct{}, len(poc.Pocs))
+		for _, pocItem := range poc.Pocs {
+			if _, exists := imageIDs[pocItem.ImageID]; exists {
+				continue
+			}
+
+			err = pi.driver.FileReference().PullUsedBy(ctx, pocItem.ImageID, poc.ID)
+			if err != nil {
+				return err
+			}
+
+			imageIDs[pocItem.ImageID] = struct{}{}
+		}
+	}
+
 	filter := bson.M{"vulnerability_id": bson.M{"$in": vulnerabilityIDs}}
 	_, err := pi.collection.DeleteMany(ctx, filter)
 	return err
