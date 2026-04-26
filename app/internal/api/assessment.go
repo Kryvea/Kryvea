@@ -690,21 +690,12 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 
 	// retrieve pocs and aggregate vulnerabilities
 	for i := range vulnerabilities {
-		// TODO: make a function for this or move in the database vulnerability retrieval
-		category, err := d.mongo.Category().GetByID(context.Background(), vulnerabilities[i].Category.ID)
+		err := d.mongo.Vulnerability().HydrateCategory(context.Background(), &vulnerabilities[i], assessment.Language)
 		if err != nil {
 			c.Status(fiber.StatusInternalServerError)
 			return c.JSON(fiber.Map{
-				"error": "Cannot get category",
+				"error": "Failed to hydrate category",
 			})
-		}
-
-		if vulnerabilities[i].GenericDescription.Enabled {
-			vulnerabilities[i].GenericDescription.Text = category.GenericDescription[assessment.Language]
-		}
-
-		if vulnerabilities[i].GenericRemediation.Enabled {
-			vulnerabilities[i].GenericRemediation.Text = category.GenericRemediation[assessment.Language]
 		}
 
 		for j, item := range vulnerabilities[i].Poc.Pocs {
