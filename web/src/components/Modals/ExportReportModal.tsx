@@ -47,7 +47,7 @@ export default function ExportReportModal({
     return opts;
   }, [cvssVersions]);
 
-  const [sortyByCvss, setSortyByCvss] = useState<SelectOption>(cvssOptions[0]);
+  const [sortByCvss, setSortByCvss] = useState<SelectOption>(cvssOptions[0]);
 
   useEffect(() => {
     const filtered = templates.filter(
@@ -77,8 +77,11 @@ export default function ExportReportModal({
       payload.template = selectedExportTemplate.id;
     }
 
+    if (sortByCvss) {
+      payload.sort_by_cvss = sortByCvss.value;
+    }
+
     if (selectedExportTypeOption.value === "zip-default") {
-      payload.sort_by_cvss = sortyByCvss.value;
       payload.password = exportEncryption.value === "password" ? exportPassword : undefined;
     }
 
@@ -166,9 +169,9 @@ export default function ExportReportModal({
           label="Sort by"
           id="sort_by"
           options={cvssOptions}
-          disabled={selectedExportTypeOption.value !== "zip-default" || cvssOptions.length < 2}
-          value={sortyByCvss}
-          onChange={setSortyByCvss}
+          disabled={cvssOptions.length < 2}
+          value={sortByCvss}
+          onChange={setSortByCvss}
         />
         <Checkbox
           id="include_informational_vulnerabilities"
