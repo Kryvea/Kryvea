@@ -29,12 +29,41 @@ class User(Base):
             return self.id, ""
         return "", json_response.get("error")
 
-    def login(self) -> bool:
+    def login(self, first_login_password: str = "") -> bool:
         data = {
             "username": self.username,
             "password": self.password,
         }
         response = self.session.post(self.base_url + "/login", json=data)
         if response.status_code == 200:
+            return True
+        elif (
+            response.status_code == 403
+            and response.json().get("error") == "Password expired"
+        ):
+            if first_login_password == "":
+                print(
+                    f"User {self.username} has expired password and no first login password is set, cannot login"
+                )
+                return False
+            else:
+                print(
+                    f"User {self.username} has expired password, resetting password to {first_login_password}"
+                )
+                if self.reset_password(first_login_password):
+                    self.password = first_login_password
+                    return True
+                else:
+                    print(f"Failed to reset password for user {self.username}")
+                    return False
+        return False
+
+    def reset_password(self, new_password: str) -> bool:
+        data = {
+            "password": new_password,
+        }
+        response = self.session.post(self.base_url + "/password/reset", json=data)
+        if response.status_code == 200:
+            self.password = new_password
             return True
         return False

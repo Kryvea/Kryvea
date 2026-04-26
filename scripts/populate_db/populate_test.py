@@ -13,7 +13,13 @@ from models.vulnerability import Vulnerability
 from requests import Session
 
 
-def populate_test(session: Session, base_url: str, username: str, password: str) -> str:
+def populate_test(
+    session: Session,
+    base_url: str,
+    username: str,
+    password: str,
+    first_login_password: str,
+) -> str:
     # initialize Base with session and base_url
     Base.base_url = base_url
     Base.session = session
@@ -22,7 +28,7 @@ def populate_test(session: Session, base_url: str, username: str, password: str)
 
     # login as admin
     user = User(username=username, password=password)
-    if not user.login():
+    if not user.login(first_login_password=first_login_password):
         raise Exception(f"Failed to login as {user.username}")
 
     # create users
