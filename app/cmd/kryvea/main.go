@@ -24,6 +24,7 @@ func main() {
 	engine, err := engine.NewEngine(
 		config.GetListeningAddr(),
 		config.GetRootPath(),
+		config.GetBodyLimitMB(),
 		config.GetMongoURI(),
 		config.GetAdminUser(),
 		config.GetAdminPass(),

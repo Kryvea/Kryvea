@@ -8,6 +8,7 @@ import (
 const (
 	addrEnv          = "KRYVEA_ADDR"
 	rootPathEnv      = "KRYVEA_ROOT_PATH"
+	bodyLimitEnv     = "KRYVEA_BODY_LIMIT_MB"
 	mongoURIEnv      = "KRYVEA_MONGO_URI"
 	adminUserEnv     = "KRYVEA_ADMIN_USER"
 	adminPassEnv     = "KRYVEA_ADMIN_PASS"
@@ -25,6 +26,18 @@ func GetListeningAddr() string {
 
 func GetRootPath() string {
 	return getEnvConfig(rootPathEnv, "/")
+}
+
+func GetBodyLimitMB() int {
+	defaultLimit := 1_000
+	limit := getEnvConfig(bodyLimitEnv, "")
+
+	bodyLimit, err := strconv.Atoi(limit)
+	if err != nil {
+		return defaultLimit
+	}
+
+	return bodyLimit
 }
 
 func GetMongoURI() string {

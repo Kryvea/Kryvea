@@ -14,11 +14,12 @@ import (
 type Engine struct {
 	addr        string
 	rootPath    string
+	bodyLimit   int
 	mongo       *mongo.Driver
 	levelWriter *zerolog.LevelWriter
 }
 
-func NewEngine(addr, rootPath, mongoURI, adminUser, adminPass string, levelWriter *zerolog.LevelWriter) (*Engine, error) {
+func NewEngine(addr, rootPath string, bodyLimit int, mongoURI, adminUser, adminPass string, levelWriter *zerolog.LevelWriter) (*Engine, error) {
 	mongo, err := mongo.NewDriver(mongoURI, adminUser, adminPass, levelWriter)
 	if err != nil {
 		return nil, err
@@ -27,6 +28,7 @@ func NewEngine(addr, rootPath, mongoURI, adminUser, adminPass string, levelWrite
 	return &Engine{
 		addr:        addr,
 		rootPath:    rootPath,
+		bodyLimit:   bodyLimit,
 		mongo:       mongo,
 		levelWriter: levelWriter,
 	}, nil
@@ -35,11 +37,9 @@ func NewEngine(addr, rootPath, mongoURI, adminUser, adminPass string, levelWrite
 func (e *Engine) Serve() {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
-		// TODO: this is a temporary solution to allow large files
-		BodyLimit: 10000 * 1024 * 1024,
-
-		JSONEncoder: sonic.Marshal,
-		JSONDecoder: sonic.Unmarshal,
+		BodyLimit:             e.bodyLimit * 1024 * 1024,
+		JSONEncoder:           sonic.Marshal,
+		JSONDecoder:           sonic.Unmarshal,
 	})
 
 	logger := zerolog.New(*e.levelWriter).With().
