@@ -333,11 +333,8 @@ func (ai *AssessmentIndex) UpdateTargets(ctx context.Context, assessmentID uuid.
 //
 // Requires transactional context to ensure data integrity
 func (ai *AssessmentIndex) Delete(ctx context.Context, assessmentID uuid.UUID) error {
-	// TODO: move inside user index
 	// Remove the assessment from the user's list
-	filter := bson.M{"assessments._id": assessmentID}
-	update := bson.M{"$pull": bson.M{"assessments": bson.M{"_id": assessmentID}}}
-	_, err := ai.driver.User().collection.UpdateMany(ctx, filter, update)
+	err := ai.driver.User().PullAssessmentFromMany(ctx, assessmentID)
 	if err != nil {
 		return fmt.Errorf("failed to remove Assessment %s from Users: %w", assessmentID.String(), err)
 	}

@@ -399,6 +399,14 @@ func (ui *UserIndex) UpdateOwnedAssessment(ctx context.Context, userID, assessme
 	return err
 }
 
+func (ui *UserIndex) PullAssessmentFromMany(ctx context.Context, assessmentID uuid.UUID) error {
+	filter := bson.M{"assessments._id": assessmentID}
+	update := bson.M{"$pull": bson.M{"assessments": bson.M{"_id": assessmentID}}}
+	_, err := ui.collection.UpdateMany(ctx, filter, update)
+
+	return err
+}
+
 func (ui *UserIndex) AssignCustomer(ctx context.Context, userID, customerID uuid.UUID) error {
 	filter := bson.M{"_id": userID}
 

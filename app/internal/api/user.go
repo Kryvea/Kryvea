@@ -42,7 +42,6 @@ func (d *Driver) AddUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: create function to update the customers only, to avoid the use of mongo.Model
 	// parse customer IDs
 	customers := make([]mongo.Customer, len(data.Customers))
 	for i, customerID := range data.Customers {
@@ -264,7 +263,6 @@ func (d *Driver) UpdateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: create function to update the customers only, to avoid the use of mongo.Model
 	// parse customer IDs
 	customers := make([]mongo.Customer, len(data.Customers))
 	for i, customerID := range data.Customers {
