@@ -132,7 +132,7 @@ export default function CategoryUpsert() {
     const payload: Omit<Category, "id" | "updated_at"> = {
       identifier: identifier.trim(),
       name: name.trim(),
-      subcategory: subcategory.trim(),
+      subcategory: subcategory?.trim(),
       source: source,
       generic_description,
       generic_remediation,
