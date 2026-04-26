@@ -10,11 +10,13 @@ type AggregatedVulnerability struct {
 	Targets []mongo.Target `json:"targets"`
 }
 
-// aggregateVulnerabilities aggregates vulnerabilities by Category ID.
+// aggregateVulnerabilities aggregates vulnerabilities by Category ID,
+// preserving the order of first occurrence (i.e. the sort order of the input slice).
 //
 // It must be called after parseHighlights to keep Highlighted fields.
 func aggregateVulnerabilities(vulnerabilities []mongo.Vulnerability) []AggregatedVulnerability {
 	aggregatedMap := make(map[uuid.UUID]*AggregatedVulnerability)
+	order := []uuid.UUID{}
 
 	for i := range vulnerabilities {
 		v := vulnerabilities[i]
@@ -27,11 +29,12 @@ func aggregateVulnerabilities(vulnerabilities []mongo.Vulnerability) []Aggregate
 		}
 
 		aggregatedMap[categoryID] = vulnerabilityToAggregated(v)
+		order = append(order, categoryID)
 	}
 
-	aggregatedVulnerabilities := []AggregatedVulnerability{}
-	for _, av := range aggregatedMap {
-		aggregatedVulnerabilities = append(aggregatedVulnerabilities, *av)
+	aggregatedVulnerabilities := make([]AggregatedVulnerability, len(order))
+	for _, id := range order {
+		aggregatedVulnerabilities = append(aggregatedVulnerabilities, *aggregatedMap[id])
 	}
 
 	return aggregatedVulnerabilities

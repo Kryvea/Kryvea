@@ -30,10 +30,14 @@ type OWASPCounter struct {
 	Total      uint
 }
 
-// TODO: use parameter to sort, instead of calculating maxVersion
-func (rd *ReportData) Prepare() {
-	// get highest cvss version
-	maxVersion := util.GetMaxCvssVersion(rd.Assessment.CVSSVersions)
+// Prepare sanitizes and sorts all report data. sortByCvss specifies which CVSS
+// version to use for ordering (e.g. "3.1", "4.0"); if empty, the highest
+// enabled version in the assessment is used.
+func (rd *ReportData) Prepare(sortByCvss string) {
+	maxVersion := sortByCvss
+	if maxVersion == "" {
+		maxVersion = util.GetMaxCvssVersion(rd.Assessment.CVSSVersions)
+	}
 
 	// sanitize customer
 	SanitizeCustomer(rd.Customer)

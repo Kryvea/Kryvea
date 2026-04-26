@@ -30,7 +30,7 @@ func NewDocxTemplate(templateBytes []byte) (*DocxTemplate, error) {
 func (t *DocxTemplate) Render(reportData *reportdata.ReportData, options *reportdata.Options) ([]byte, error) {
 	t.filename = fmt.Sprintf("%s - %s - %s", reportData.Assessment.Type.Short, reportData.Customer.Name, reportData.Assessment.Name)
 
-	reportData.Prepare()
+	reportData.Prepare(options.SortByCvss)
 
 	DocxTemplate, err := gotemplatedocx.NewDocxTemplateFromBytes(t.TemplateBytes)
 	if err != nil {
@@ -62,6 +62,7 @@ func (t *DocxTemplate) Render(reportData *reportdata.ReportData, options *report
 		"tableComplexityColor": reportdata.TableComplexityColor,
 		"shadeTextBg":          reportdata.ShadeTextBg,
 		"debug":                reportdata.Debug,
+		"vulnIndex":            reportdata.MakeVulnIndexFunc(reportData.Vulnerabilities),
 	})
 
 	err = DocxTemplate.Apply(reportData)
