@@ -639,7 +639,6 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 	// parse request body
 	data := &exportRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		d.logger.Info().Msg(err.Error())
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
 			"error": "Cannot parse JSON",
@@ -745,7 +744,7 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 	// render report
 	renderedTemplate, err := report.Render(reportData, options)
 	if err != nil {
-		d.logger.Error().Msg(err.Error())
+		d.logger.Error().Err(err).Msg("failed to render report")
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
 			"error": "Failed to generate report",

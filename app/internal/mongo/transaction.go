@@ -62,7 +62,7 @@ func (s *Session) End() {
 			s.lock,
 		)
 		if err != nil {
-			s.driver.logger.Error().Msgf("cannot unlock lock: %v", err)
+			s.driver.logger.Error().Err(err).Msg("cannot unlock lock")
 		}
 	}
 }

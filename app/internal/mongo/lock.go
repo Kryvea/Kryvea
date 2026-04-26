@@ -55,7 +55,7 @@ func (ui *LockIndex) Lock(ctx context.Context, lockName string, lockedBy uuid.UU
 		return nil
 	}
 
-	ui.driver.logger.Info().Msgf("Attempting to acquire lock \"%s\"", lockName)
+	ui.driver.logger.Info().Str("lock", lockName).Msg("acquiring lock")
 
 	now := time.Now()
 	staleThreshold := now.Add(-1 * time.Minute)
@@ -90,7 +90,7 @@ func (ui *LockIndex) Lock(ctx context.Context, lockName string, lockedBy uuid.UU
 		return fmt.Errorf("%w: lock \"%s\" is already held", ErrLocked, lockName)
 	}
 
-	ui.driver.logger.Info().Msgf("Lock \"%s\" successfully acquired by %s", lockName, lockedBy)
+	ui.driver.logger.Info().Str("lock", lockName).Str("by", lockedBy.String()).Msg("lock acquired")
 	return nil
 }
 
