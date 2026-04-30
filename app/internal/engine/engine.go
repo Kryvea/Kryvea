@@ -2,7 +2,7 @@ package engine
 
 import (
 	"github.com/Kryvea/Kryvea/internal/api"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/fiber/v2"
@@ -15,23 +15,18 @@ type Engine struct {
 	addr        string
 	rootPath    string
 	bodyLimit   int
-	mongo       *mongo.Driver
-	levelWriter *zerolog.LevelWriter
+	db          store.Store
+	levelWriter zerolog.LevelWriter
 }
 
-func NewEngine(addr, rootPath string, bodyLimit int, mongoURI, adminUser, adminPass string, levelWriter *zerolog.LevelWriter) (*Engine, error) {
-	mongo, err := mongo.NewDriver(mongoURI, adminUser, adminPass, levelWriter)
-	if err != nil {
-		return nil, err
-	}
-
+func NewEngine(addr, rootPath string, bodyLimit int, db store.Store, levelWriter zerolog.LevelWriter) *Engine {
 	return &Engine{
 		addr:        addr,
 		rootPath:    rootPath,
 		bodyLimit:   bodyLimit,
-		mongo:       mongo,
+		db:          db,
 		levelWriter: levelWriter,
-	}, nil
+	}
 }
 
 func (e *Engine) Serve() {
@@ -42,7 +37,7 @@ func (e *Engine) Serve() {
 		JSONDecoder:           sonic.Unmarshal,
 	})
 
-	logger := zerolog.New(*e.levelWriter).With().
+	logger := zerolog.New(e.levelWriter).With().
 		Str("source", "fiber-engine").
 		Timestamp().Logger()
 
@@ -50,7 +45,7 @@ func (e *Engine) Serve() {
 		Logger: &logger,
 	}))
 
-	api := api.NewDriver(e.mongo, e.levelWriter)
+	api := api.NewDriver(e.db, e.levelWriter)
 
 	apiGroup := app.Group(util.JoinUrlPath(e.rootPath, "api"))
 	apiGroup.Use(api.SessionMiddleware)

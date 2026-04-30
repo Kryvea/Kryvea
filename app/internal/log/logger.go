@@ -31,7 +31,7 @@ func (lw levelWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err erro
 	return len(p), nil
 }
 
-func NewLevelWriter(logPath string, maxSizeMB, maxBackups, maxAgeDays int, compress bool) *zerolog.LevelWriter {
+func NewLevelWriter(logPath string, maxSizeMB, maxBackups, maxAgeDays int, compress bool) zerolog.LevelWriter {
 	logWriter := &lumberjack.Logger{
 		Filename:   filepath.Join(logPath, logFileName),
 		MaxSize:    maxSizeMB,
@@ -40,12 +40,10 @@ func NewLevelWriter(logPath string, maxSizeMB, maxBackups, maxAgeDays int, compr
 		Compress:   compress,
 	}
 
-	levelWriter := zerolog.MultiLevelWriter(
+	return zerolog.MultiLevelWriter(
 		levelWriter{writer: os.Stdout, minLevel: zerolog.DebugLevel, maxLevel: zerolog.PanicLevel},
 		levelWriter{writer: logWriter, minLevel: zerolog.DebugLevel, maxLevel: zerolog.PanicLevel},
 	)
-
-	return &levelWriter
 }
 
 func GetLogPath() string {

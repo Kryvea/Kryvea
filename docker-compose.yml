@@ -1,69 +1,34 @@
 services:
-    db:
-        image: mongo
-        container_name: kryvea-db
+    pg:
+        image: postgres:16-alpine
+        container_name: kryvea-pg
         restart: unless-stopped
         environment:
-            - MONGO_INITDB_ROOT_USERNAME=kryveauser
-            - MONGO_INITDB_ROOT_PASSWORD=kryveapass
-        command:
-            [
-                "mongod",
-                "--replSet",
-                "rs0",
-                "--bind_ip_all",
-                "--keyFile",
-                "/data/replica.key",
-                "--auth",
-            ]
-        entrypoint:
-            - bash
-            - -c
-            - |
-                if [ ! -f "/data/replica.key" ]; then
-                    openssl rand -base64 768 > "/data/replica.key"
-                fi
-                chmod 400 /data/replica.key
-                chown 999:999 /data/replica.key
-                exec docker-entrypoint.sh "$$@"
+            - POSTGRES_USER=kryvea
+            - POSTGRES_PASSWORD=kryveapass
+            - POSTGRES_DB=kryvea
         volumes:
-            - ./.data/mongodb:/data/db
+            - ./.data/postgres:/var/lib/postgresql/data
         networks:
             - kryvea-data
         expose:
-            - 27017
-
-    db-init:
-        image: mongo
-        depends_on:
-            - db
-        command:
-            - bash
-            - -c
-            - |
-                until mongosh "mongodb://kryveauser:kryveapass@db:27017/admin" --eval '
-                    try {
-                        rs.status();
-                    } catch (e) {
-                        rs.initiate({
-                            _id: "rs0",
-                            members: [{ _id: 0, host: "db:27017" }]
-                        });
-                    }
-                ' &>/dev/null; do
-                    sleep 2;
-                done
-        networks:
-            - kryvea-data
+            - 5432
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U kryvea -d kryvea"]
+            interval: 5s
+            timeout: 3s
+            retries: 10
 
     app:
         build: app
+        image: kryvea-app:latest
         container_name: kryvea-app
         restart: unless-stopped
         environment:
             - KRYVEA_ADDR=0.0.0.0:8080
             - KRYVEA_ROOT_PATH=/
-            - KRYVEA_MONGO_URI=mongodb://kryveauser:kryveapass@kryvea-db:27017/?replicaSet=rs0
+            - KRYVEA_PG_DSN=postgres://kryvea:kryveapass@kryvea-pg:5432/kryvea?sslmode=disable
+            - KRYVEA_FILES_DIR=/var/lib/kryvea/files
             - KRYVEA_ADMIN_USER=kryvea
             - KRYVEA_ADMIN_PASS=kryveapassword
             - KRYVEA_LOG_DIRECTORY=/var/log/kryvea/
@@ -73,9 +38,10 @@ services:
             - KRYVEA_LOG_COMPRESS=true
         volumes:
             - ./.data/log:/var/log/kryvea/
+            - ./.data/files:/var/lib/kryvea/files
         depends_on:
-            db-init:
-                condition: service_completed_successfully
+            pg:
+                condition: service_healthy
         networks:
             - kryvea-net
             - kryvea-data
@@ -89,7 +55,6 @@ services:
         volumes:
             - ./.data/ssl:/etc/nginx/ssl
         depends_on:
-            - db
             - app
         ports:
             - 443:443

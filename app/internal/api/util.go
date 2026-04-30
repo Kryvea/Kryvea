@@ -6,9 +6,18 @@ import (
 	"io"
 	"mime/multipart"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
+
+func (d *Driver) gcFilesAsync() {
+	go func() {
+		if _, err := d.db.FileReference().GCFiles(context.Background()); err != nil {
+			d.logger.Warn().Err(err).Msg("file gc failed")
+		}
+	}()
+}
 
 func (d *Driver) formDataReadFile(c *fiber.Ctx, fieldName string) (data []byte, filename string, err error) {
 	file, err := c.FormFile(fieldName)
@@ -34,7 +43,7 @@ func (d *Driver) formDataReadImage(c *fiber.Ctx, ctx context.Context, fieldName 
 		return nil, "", errors.New("Invalid file")
 	}
 
-	err = d.mongo.Setting().ValidateImageSize(ctx, file.Size)
+	err = d.db.Setting().ValidateImageSize(ctx, file.Size)
 	if err != nil {
 		return nil, "", err
 	}
@@ -44,8 +53,8 @@ func (d *Driver) formDataReadImage(c *fiber.Ctx, ctx context.Context, fieldName 
 		return nil, "", err
 	}
 
-	if !mongo.IsImageTypeAllowed(data) {
-		return nil, "", mongo.ErrImageTypeNotAllowed
+	if !model.IsImageTypeAllowed(data) {
+		return nil, "", store.ErrImageTypeNotAllowed
 	}
 
 	return data, file.Filename, nil

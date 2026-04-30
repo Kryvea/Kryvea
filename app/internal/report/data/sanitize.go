@@ -7,16 +7,16 @@ import (
 	"strings"
 
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 )
 
-func SanitizeCustomer(customer *mongo.Customer) {
+func SanitizeCustomer(customer *model.Customer) {
 	customer.Name = escapeXMLString(customer.Name)
 	customer.Language = escapeXMLString(customer.Language)
 }
 
-func SanitizeAssessment(assessment *mongo.Assessment) {
-	sanitizeTargets := make([]mongo.Target, len(assessment.Targets))
+func SanitizeAssessment(assessment *model.Assessment) {
+	sanitizeTargets := make([]model.Target, len(assessment.Targets))
 	for i, target := range assessment.Targets {
 		sanitizeTarget(&target)
 		sanitizeTargets[i] = target
@@ -33,7 +33,7 @@ func SanitizeAssessment(assessment *mongo.Assessment) {
 	assessment.OSSTMMVector = escapeXMLString(assessment.OSSTMMVector)
 }
 
-func sanitizeTarget(target *mongo.Target) {
+func sanitizeTarget(target *model.Target) {
 	target.IPv4 = escapeXMLString(target.IPv4)
 	target.IPv6 = escapeXMLString(target.IPv6)
 	target.Protocol = escapeXMLString(target.Protocol)
@@ -41,7 +41,7 @@ func sanitizeTarget(target *mongo.Target) {
 	target.Tag = escapeXMLString(target.Tag)
 }
 
-func SanitizeAndSortVulnerabilities(vulnerabilities []mongo.Vulnerability, maxVersion string, language string) {
+func SanitizeAndSortVulnerabilities(vulnerabilities []model.Vulnerability, maxVersion string, language string) {
 	if len(vulnerabilities) == 0 {
 		return
 	}
@@ -71,7 +71,7 @@ func SanitizeAndSortVulnerabilities(vulnerabilities []mongo.Vulnerability, maxVe
 	}
 }
 
-func sanitizeVulnerability(item *mongo.Vulnerability) {
+func sanitizeVulnerability(item *model.Vulnerability) {
 	SanitizeAndSortPoc(&item.Poc)
 
 	item.Category.Identifier = escapeXMLString(item.Category.Identifier)
@@ -104,7 +104,7 @@ func sanitizeVector(item *cvss.Vector) {
 	item.Description = escapeXMLString(item.Description)
 }
 
-func SanitizeAndSortPoc(poc *mongo.Poc) {
+func SanitizeAndSortPoc(poc *model.Poc) {
 	if len(poc.Pocs) == 0 {
 		return
 	}
@@ -118,7 +118,7 @@ func SanitizeAndSortPoc(poc *mongo.Poc) {
 	})
 }
 
-func sanitizePocItem(item *mongo.PocItem) {
+func sanitizePocItem(item *model.PocItem) {
 	item.Type = escapeXMLString(item.Type)
 	item.Description = escapeXMLString(item.Description)
 	item.URI = escapeXMLString(item.URI)
@@ -127,7 +127,7 @@ func sanitizePocItem(item *mongo.PocItem) {
 	item.TextLanguage = escapeXMLString(item.TextLanguage)
 }
 
-func sanitizeReqResText(item *mongo.PocItem) {
+func sanitizeReqResText(item *model.PocItem) {
 	item.Request = escapeXMLString(item.Request)
 	item.Response = escapeXMLString(item.Response)
 	item.TextData = escapeXMLString(item.TextData)

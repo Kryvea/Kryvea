@@ -4,14 +4,14 @@ import (
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/util"
 )
 
 type ReportData struct {
-	Customer                  *mongo.Customer
-	Assessment                *mongo.Assessment
-	Vulnerabilities           []mongo.Vulnerability
+	Customer                  *model.Customer
+	Assessment                *model.Assessment
+	Vulnerabilities           []model.Vulnerability
 	AggregatedVulnerabilities []AggregatedVulnerability
 	DeliveryDateTime          time.Time
 	MaxCVSS                   map[string]cvss.Vector     // maps each cvss version to the vector with the highest score

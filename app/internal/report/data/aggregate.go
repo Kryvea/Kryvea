@@ -1,20 +1,20 @@
 package reportdata
 
 import (
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/google/uuid"
 )
 
 type AggregatedVulnerability struct {
-	mongo.Vulnerability
-	Targets []mongo.Target `json:"targets"`
+	model.Vulnerability
+	Targets []model.Target `json:"targets"`
 }
 
 // aggregateVulnerabilities aggregates vulnerabilities by Category ID,
 // preserving the order of first occurrence (i.e. the sort order of the input slice).
 //
 // It must be called after parseHighlights to keep Highlighted fields.
-func aggregateVulnerabilities(vulnerabilities []mongo.Vulnerability) []AggregatedVulnerability {
+func aggregateVulnerabilities(vulnerabilities []model.Vulnerability) []AggregatedVulnerability {
 	aggregatedMap := make(map[uuid.UUID]*AggregatedVulnerability)
 	order := []uuid.UUID{}
 
@@ -40,23 +40,23 @@ func aggregateVulnerabilities(vulnerabilities []mongo.Vulnerability) []Aggregate
 	return aggregatedVulnerabilities
 }
 
-func vulnerabilityToAggregated(vulnerability mongo.Vulnerability) *AggregatedVulnerability {
+func vulnerabilityToAggregated(vulnerability model.Vulnerability) *AggregatedVulnerability {
 	aggregated := &AggregatedVulnerability{
 		Vulnerability: vulnerability,
-		Targets: []mongo.Target{
+		Targets: []model.Target{
 			vulnerability.Target,
 		},
 	}
 
 	if len(vulnerability.Poc.Pocs) > 0 {
-		cp := make([]mongo.PocItem, len(vulnerability.Poc.Pocs))
+		cp := make([]model.PocItem, len(vulnerability.Poc.Pocs))
 		copy(cp, vulnerability.Poc.Pocs)
 		aggregated.Poc.Pocs = cp
 	}
 	return aggregated
 }
 
-func appendUniqueTarget(targets []mongo.Target, newTarget mongo.Target) []mongo.Target {
+func appendUniqueTarget(targets []model.Target, newTarget model.Target) []model.Target {
 	for _, t := range targets {
 		if t.ID == newTarget.ID {
 			return targets

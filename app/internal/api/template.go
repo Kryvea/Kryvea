@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/bytedance/sonic"
 	"github.com/gabriel-vasile/mimetype"
@@ -18,7 +19,7 @@ type templateRequestData struct {
 	Identifier string `json:"identifier"`
 }
 
-func (d *Driver) addTemplate(c *fiber.Ctx, ctx context.Context) (*mongo.Template, string) {
+func (d *Driver) addTemplate(c *fiber.Ctx, ctx context.Context) (*model.Template, string) {
 	// parse request data
 	data := templateRequestData{}
 	err := sonic.Unmarshal([]byte(c.FormValue("data")), &data)
@@ -44,19 +45,19 @@ func (d *Driver) addTemplate(c *fiber.Ctx, ctx context.Context) (*mongo.Template
 
 	// check if the template mimetype is supported
 	mimeType := mimetype.Detect(templateData)
-	templateType, exists := mongo.SupportedTemplateMimeTypes[mimeType.String()]
+	templateType, exists := model.SupportedTemplateMimeTypes[mimeType.String()]
 	if !exists {
 		return nil, "Invalid template type"
 	}
 
 	// insert file into the database
-	fileID, mime, err := d.mongo.FileReference().Insert(ctx, templateData)
+	fileID, mime, err := d.db.FileReference().Insert(ctx, templateData)
 	if err != nil {
 		return nil, "Cannot upload template"
 	}
 
 	// create a new template
-	template := &mongo.Template{
+	template := &model.Template{
 		Name:         data.Name,
 		Filename:     filename,
 		Language:     data.Language,
@@ -64,8 +65,8 @@ func (d *Driver) addTemplate(c *fiber.Ctx, ctx context.Context) (*mongo.Template
 		MimeType:     mime,
 		Identifier:   data.Identifier,
 		FileID:       fileID,
-		Customer: &mongo.Customer{
-			Model: mongo.Model{
+		Customer: &model.Customer{
+			Model: model.Model{
 				ID: uuid.Nil,
 			},
 		},
@@ -74,13 +75,7 @@ func (d *Driver) addTemplate(c *fiber.Ctx, ctx context.Context) (*mongo.Template
 }
 
 func (d *Driver) AddGlobalTemplate(c *fiber.Ctx) error {
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	templateID, err := session.WithTransaction(func(ctx context.Context) (any, error) {
+	templateID, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		// upload template file into database
 		template, errStr := d.addTemplate(c, ctx)
 		if errStr != "" {
@@ -88,9 +83,9 @@ func (d *Driver) AddGlobalTemplate(c *fiber.Ctx) error {
 		}
 
 		// insert the template into the database
-		templateID, err := d.mongo.Template().Insert(ctx, template)
+		templateID, err := d.db.Template().Insert(ctx, template)
 		if err != nil {
-			if mongo.IsDuplicateKeyError(err) {
+			if errors.Is(err, store.ErrDuplicateKey) {
 				return uuid.Nil, errors.New("Template with provided data already exists")
 			}
 			return uuid.Nil, errors.New("Cannot create template")
@@ -113,10 +108,10 @@ func (d *Driver) AddGlobalTemplate(c *fiber.Ctx) error {
 }
 
 func (d *Driver) AddCustomerTemplate(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// if customer is specified check if user has access to it
-	customer, errStr := d.customerFromParam(c.Params("customer"))
+	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -131,13 +126,7 @@ func (d *Driver) AddCustomerTemplate(c *fiber.Ctx) error {
 		})
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	templateID, err := session.WithTransaction(func(ctx context.Context) (any, error) {
+	templateID, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		// upload template file into database
 		template, errStr := d.addTemplate(c, ctx)
 		if errStr != "" {
@@ -147,9 +136,9 @@ func (d *Driver) AddCustomerTemplate(c *fiber.Ctx) error {
 		template.Customer.ID = customer.ID
 
 		// insert the template into the database
-		templateID, err := d.mongo.Template().Insert(ctx, template)
+		templateID, err := d.db.Template().Insert(ctx, template)
 		if err != nil {
-			if mongo.IsDuplicateKeyError(err) {
+			if errors.Is(err, store.ErrDuplicateKey) {
 				return uuid.Nil, errors.New("Template with provided data already exists")
 			}
 			return uuid.Nil, errors.New("Cannot create template")
@@ -172,10 +161,10 @@ func (d *Driver) AddCustomerTemplate(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetTemplate(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// get template from param
-	template, errStr := d.templateFromParam(c.Params("template"))
+	template, errStr := d.templateFromParam(c.UserContext(), c.Params("template"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -184,7 +173,7 @@ func (d *Driver) GetTemplate(c *fiber.Ctx) error {
 	}
 
 	// check if user has access to the template
-	if !mongo.IsNullCustomer(template.Customer) && !user.CanAccessCustomer(template.Customer.ID) {
+	if !model.IsNullCustomer(template.Customer) && !user.CanAccessCustomer(template.Customer.ID) {
 		c.Status(fiber.StatusForbidden)
 		return c.JSON(fiber.Map{
 			"error": "Forbidden",
@@ -196,10 +185,10 @@ func (d *Driver) GetTemplate(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetTemplates(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// get all templates
-	templates, err := d.mongo.Template().GetAll(context.Background())
+	templates, err := d.db.Template().GetAll(c.UserContext())
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -208,9 +197,9 @@ func (d *Driver) GetTemplates(c *fiber.Ctx) error {
 	}
 
 	// filter templates by user access
-	filteredTemplates := []mongo.Template{}
+	filteredTemplates := []model.Template{}
 	for _, template := range templates {
-		if mongo.IsNullCustomer(template.Customer) || user.CanAccessCustomer(template.Customer.ID) {
+		if model.IsNullCustomer(template.Customer) || user.CanAccessCustomer(template.Customer.ID) {
 			filteredTemplates = append(filteredTemplates, template)
 		}
 	}
@@ -220,10 +209,10 @@ func (d *Driver) GetTemplates(c *fiber.Ctx) error {
 }
 
 func (d *Driver) DeleteTemplate(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// get template from param
-	template, errStr := d.templateFromParam(c.Params("template"))
+	template, errStr := d.templateFromParam(c.UserContext(), c.Params("template"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -232,36 +221,22 @@ func (d *Driver) DeleteTemplate(c *fiber.Ctx) error {
 	}
 
 	// check if user has access to the template
-	if (mongo.IsNullCustomer(template.Customer) && user.Role != mongo.RoleAdmin) ||
-		(!mongo.IsNullCustomer(template.Customer) && !user.CanAccessCustomer(template.Customer.ID)) {
+	if (model.IsNullCustomer(template.Customer) && user.Role != model.RoleAdmin) ||
+		(!model.IsNullCustomer(template.Customer) && !user.CanAccessCustomer(template.Customer.ID)) {
 		c.Status(fiber.StatusForbidden)
 		return c.JSON(fiber.Map{
 			"error": "Forbidden",
 		})
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// delete the template from the database
-		err := d.mongo.Template().Delete(ctx, template.ID)
-		if err != nil {
-			return nil, errors.New("Failed to delete template")
-		}
-
-		return nil, nil
-	})
-	if err != nil {
+	if err := d.db.Template().Delete(c.UserContext(), template.ID); err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to delete template",
 		})
 	}
 
+	d.gcFilesAsync()
 	c.Status(fiber.StatusOK)
 	return c.JSON(fiber.Map{
 		"message": "Template deleted",
@@ -280,7 +255,7 @@ func (d *Driver) validateTemplateData(data *templateRequestData) string {
 	return ""
 }
 
-func (d *Driver) templateFromParam(param string) (*mongo.Template, string) {
+func (d *Driver) templateFromParam(ctx context.Context, param string) (*model.Template, string) {
 	if param == "" {
 		return nil, "Template ID is required"
 	}
@@ -290,7 +265,7 @@ func (d *Driver) templateFromParam(param string) (*mongo.Template, string) {
 		return nil, "Invalid template ID"
 	}
 
-	template, err := d.mongo.Template().GetByID(context.Background(), templateID)
+	template, err := d.db.Template().GetByID(ctx, templateID)
 	if err != nil {
 		return nil, "Invalid template ID"
 	}

@@ -11,7 +11,7 @@ import (
 
 	"github.com/Kryvea/Kryvea/internal/cvss"
 	"github.com/Kryvea/Kryvea/internal/i18n"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	reportdata "github.com/Kryvea/Kryvea/internal/report/data"
 	"github.com/google/uuid"
 )
@@ -51,7 +51,7 @@ func randStatus() string {
 	return statuses[rand.Intn(len(statuses))]
 }
 
-func randAssessmentType() mongo.AssessmentType {
+func randAssessmentType() model.AssessmentType {
 	typesKey := []string{"WAPT", "VAPT", "MAPT", "IoT", "Red Team Assessment"}
 	typesValue := []string{
 		"Web Application Penetration Test",
@@ -63,7 +63,7 @@ func randAssessmentType() mongo.AssessmentType {
 
 	selected := rand.Intn(len(typesKey))
 
-	return mongo.AssessmentType{
+	return model.AssessmentType{
 		Short: typesKey[selected],
 		Full:  typesValue[selected],
 	}
@@ -161,19 +161,19 @@ func TestDefault(t *testing.T) {
 		t.Fatalf("i18n.InitI18n() = %v, want %v", err, nil)
 	}
 
-	customer := &mongo.Customer{
+	customer := &model.Customer{
 		Name:     randName(3),
 		Language: randLanguage(),
 	}
 
-	var targets []mongo.Target
+	var targets []model.Target
 	for i := 0; i < 2; i++ {
-		targets = append(targets, mongo.Target{
+		targets = append(targets, model.Target{
 			IPv4: randIP(), FQDN: randHostname(),
 		})
 	}
 
-	assessment := &mongo.Assessment{
+	assessment := &model.Assessment{
 		Name:            randName(3),
 		Language:        customer.Language,
 		StartDateTime:   time.Now().Add(-time.Hour * 24 * 7),
@@ -198,25 +198,25 @@ func TestDefault(t *testing.T) {
 		t.Errorf("base64.StdEncoding.DecodeString() = %v, want %v", err, nil)
 	}
 
-	var vulnerabilities []mongo.Vulnerability
+	var vulnerabilities []model.Vulnerability
 	for i := 0; i < 5; i++ {
-		vulnerability := mongo.Vulnerability{
-			Model:         mongo.Model{ID: uuid.New()},
-			Category:      mongo.Category{Name: randName(3)},
+		vulnerability := model.Vulnerability{
+			Model:         model.Model{ID: uuid.New()},
+			Category:      model.Category{Name: randName(3)},
 			DetailedTitle: randName(3),
 			Status:        "Open",
 			References:    []string{randUrl(), randUrl()},
-			GenericDescription: mongo.VulnerabilityGeneric{
+			GenericDescription: model.VulnerabilityGeneric{
 				Text: randName(20),
 			},
-			GenericRemediation: mongo.VulnerabilityGeneric{
+			GenericRemediation: model.VulnerabilityGeneric{
 				Text: randName(20),
 			},
 			Description: randName(20),
 			Remediation: randName(10),
 			Target:      assessment.Targets[rand.Intn(len(assessment.Targets))],
 		}
-		poc := mongo.Poc{VulnerabilityID: vulnerability.ID}
+		poc := model.Poc{VulnerabilityID: vulnerability.ID}
 
 		for _, version := range cvss.CvssVersions {
 			cvssVector := randCVSSVector(version)
@@ -238,7 +238,7 @@ func TestDefault(t *testing.T) {
 		}
 
 		for j := 0; j < 3; j++ {
-			poc.Pocs = append(poc.Pocs, mongo.PocItem{
+			poc.Pocs = append(poc.Pocs, model.PocItem{
 				Index:       j + 1,
 				Type:        "request",
 				Description: randName(10),
@@ -247,7 +247,7 @@ func TestDefault(t *testing.T) {
 				Response:    randName(20),
 			})
 		}
-		poc.Pocs = append(poc.Pocs, mongo.PocItem{
+		poc.Pocs = append(poc.Pocs, model.PocItem{
 			Index:        4,
 			Type:         "image",
 			Description:  randName(10),
@@ -256,7 +256,7 @@ func TestDefault(t *testing.T) {
 			ImageCaption: "Caption" + randName(2),
 		})
 
-		poc.Pocs = append(poc.Pocs, mongo.PocItem{
+		poc.Pocs = append(poc.Pocs, model.PocItem{
 			Index:        5,
 			Type:         "text",
 			Description:  randName(10),

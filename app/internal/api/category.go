@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
@@ -42,7 +43,7 @@ func (d *Driver) AddCategory(c *fiber.Ctx) error {
 		})
 	}
 
-	category := &mongo.Category{
+	category := &model.Category{
 		Identifier:         data.Identifier,
 		Name:               data.Name,
 		Subcategory:        data.Subcategory,
@@ -54,11 +55,11 @@ func (d *Driver) AddCategory(c *fiber.Ctx) error {
 	}
 
 	// insert category into database
-	categoryID, err := d.mongo.Category().Insert(context.Background(), category)
+	categoryID, err := d.db.Category().Insert(c.UserContext(), category)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 
-		if mongo.IsDuplicateKeyError(err) {
+		if errors.Is(err, store.ErrDuplicateKey) {
 			subcategory := ""
 			if category.Subcategory != "" {
 				subcategory = fmt.Sprintf(" (%s)", category.Subcategory)
@@ -82,7 +83,7 @@ func (d *Driver) AddCategory(c *fiber.Ctx) error {
 
 func (d *Driver) UpdateCategory(c *fiber.Ctx) error {
 	// parse category param
-	category, errStr := d.categoryFromParam(c.Params("category"))
+	category, errStr := d.categoryFromParam(c.UserContext(), c.Params("category"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -108,7 +109,7 @@ func (d *Driver) UpdateCategory(c *fiber.Ctx) error {
 		})
 	}
 
-	newCategory := &mongo.Category{
+	newCategory := &model.Category{
 		Identifier:         data.Identifier,
 		Name:               data.Name,
 		Subcategory:        data.Subcategory,
@@ -120,11 +121,11 @@ func (d *Driver) UpdateCategory(c *fiber.Ctx) error {
 	}
 
 	// update category in database
-	err := d.mongo.Category().Update(context.Background(), category.ID, newCategory)
+	err := d.db.Category().Update(c.UserContext(), category.ID, newCategory)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 
-		if mongo.IsDuplicateKeyError(err) {
+		if errors.Is(err, store.ErrDuplicateKey) {
 			subcategory := ""
 			if newCategory.Subcategory != "" {
 				subcategory = fmt.Sprintf(" (%s)", newCategory.Subcategory)
@@ -147,7 +148,7 @@ func (d *Driver) UpdateCategory(c *fiber.Ctx) error {
 
 func (d *Driver) DeleteCategory(c *fiber.Ctx) error {
 	// parse category param
-	category, errStr := d.categoryFromParam(c.Params("category"))
+	category, errStr := d.categoryFromParam(c.UserContext(), c.Params("category"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -155,25 +156,10 @@ func (d *Driver) DeleteCategory(c *fiber.Ctx) error {
 		})
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// delete category from database
-		err := d.mongo.Category().Delete(ctx, category.ID)
-		if err != nil {
-			return nil, errors.New("Cannot delete category")
-		}
-
-		return nil, err
-	})
-	if err != nil {
+	if err := d.db.Category().Delete(c.UserContext(), category.ID); err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Cannot delete category",
 		})
 	}
 
@@ -192,7 +178,7 @@ func (d *Driver) SearchCategories(c *fiber.Ctx) error {
 		})
 	}
 
-	categories, err := d.mongo.Category().Search(context.Background(), query)
+	categories, err := d.db.Category().Search(c.UserContext(), query)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -205,7 +191,7 @@ func (d *Driver) SearchCategories(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetCategories(c *fiber.Ctx) error {
-	categories, err := d.mongo.Category().GetAll(context.Background())
+	categories, err := d.db.Category().GetAll(c.UserContext())
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -218,7 +204,7 @@ func (d *Driver) GetCategories(c *fiber.Ctx) error {
 }
 
 func (d *Driver) ExportCategories(c *fiber.Ctx) error {
-	categories, err := d.mongo.Category().GetAll(context.Background())
+	categories, err := d.db.Category().GetAll(c.UserContext())
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -233,7 +219,7 @@ func (d *Driver) ExportCategories(c *fiber.Ctx) error {
 
 func (d *Driver) GetCategory(c *fiber.Ctx) error {
 	// parse category param
-	category, errStr := d.categoryFromParam(c.Params("category"))
+	category, errStr := d.categoryFromParam(c.UserContext(), c.Params("category"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -278,18 +264,12 @@ func (d *Driver) UploadCategories(c *fiber.Ctx) error {
 		}
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	categories, err := session.WithTransaction(func(ctx context.Context) (any, error) {
+	categories, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		categories := make([]uuid.UUID, 0, len(data))
 
 		// insert each category into database
 		for _, categoryData := range data {
-			category := &mongo.Category{
+			category := &model.Category{
 				Identifier:         categoryData.Identifier,
 				Name:               categoryData.Name,
 				Subcategory:        categoryData.Subcategory,
@@ -300,9 +280,9 @@ func (d *Driver) UploadCategories(c *fiber.Ctx) error {
 				Source:             categoryData.Source,
 			}
 
-			categoryID, err := d.mongo.Category().Upsert(ctx, category, override == "true")
+			categoryID, err := d.db.Category().Upsert(ctx, category, override == "true")
 			if err != nil {
-				if mongo.IsDuplicateKeyError(err) {
+				if errors.Is(err, store.ErrDuplicateKey) {
 					subcategory := ""
 					if category.Subcategory != "" {
 						subcategory = fmt.Sprintf(" (%s)", category.Subcategory)
@@ -331,7 +311,7 @@ func (d *Driver) UploadCategories(c *fiber.Ctx) error {
 	})
 }
 
-func (d *Driver) categoryFromParam(categoryParam string) (*mongo.Category, string) {
+func (d *Driver) categoryFromParam(ctx context.Context, categoryParam string) (*model.Category, string) {
 	if categoryParam == "" {
 		return nil, "Category ID is required"
 	}
@@ -341,7 +321,7 @@ func (d *Driver) categoryFromParam(categoryParam string) (*mongo.Category, strin
 		return nil, "Invalid category ID"
 	}
 
-	category, err := d.mongo.Category().GetByID(context.Background(), categoryID)
+	category, err := d.db.Category().GetByID(ctx, categoryID)
 	if err != nil {
 		return nil, "Invalid category ID"
 	}

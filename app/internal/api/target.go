@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -22,7 +23,7 @@ type targetRequestData struct {
 }
 
 func (d *Driver) AddTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse request body
 	data := &targetRequestData{}
@@ -43,7 +44,7 @@ func (d *Driver) AddTarget(c *fiber.Ctx) error {
 	}
 
 	// check if user has access to customer
-	customer, errStr := d.customerFromParam(data.CustomerID)
+	customer, errStr := d.customerFromParam(c.UserContext(), data.CustomerID)
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -58,14 +59,14 @@ func (d *Driver) AddTarget(c *fiber.Ctx) error {
 		})
 	}
 
-	assessment := &mongo.Assessment{
-		Model: mongo.Model{
+	assessment := &model.Assessment{
+		Model: model.Model{
 			ID: uuid.Nil,
 		},
 	}
 	// if assessment is not empty retrieve it from database
 	if data.AssessmentID != "" {
-		assessment, errStr = d.assessmentFromParam(data.AssessmentID)
+		assessment, errStr = d.assessmentFromParam(c.UserContext(), data.AssessmentID)
 		if errStr != "" {
 			c.Status(fiber.StatusBadRequest)
 			return c.JSON(fiber.Map{
@@ -74,7 +75,7 @@ func (d *Driver) AddTarget(c *fiber.Ctx) error {
 		}
 	}
 
-	target := &mongo.Target{
+	target := &model.Target{
 		IPv4:     data.IPv4,
 		IPv6:     data.IPv6,
 		Port:     data.Port,
@@ -83,19 +84,13 @@ func (d *Driver) AddTarget(c *fiber.Ctx) error {
 		Tag:      data.Tag,
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	targetID, err := session.WithTransaction(func(ctx context.Context) (any, error) {
+	targetID, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		// insert target into database
-		targetID, err := d.mongo.Target().Insert(ctx, target, customer.ID)
+		targetID, err := d.db.Target().Insert(ctx, target, customer.ID)
 		if err != nil {
 			c.Status(fiber.StatusBadRequest)
 
-			if mongo.IsDuplicateKeyError(err) {
+			if errors.Is(err, store.ErrDuplicateKey) {
 				return uuid.Nil, errors.New("Target with provided data already exists")
 			}
 
@@ -104,7 +99,7 @@ func (d *Driver) AddTarget(c *fiber.Ctx) error {
 
 		// add target to assessment if provided
 		if assessment.ID != uuid.Nil {
-			err = d.mongo.Assessment().UpdateTargets(ctx, assessment.ID, target.ID)
+			err = d.db.Assessment().UpdateTargets(ctx, assessment.ID, target.ID)
 			if err != nil {
 				return uuid.Nil, errors.New("Cannot add target to assessment")
 			}
@@ -127,10 +122,10 @@ func (d *Driver) AddTarget(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse target param
-	target, errStr := d.targetFromParam(c.Params("target"))
+	target, errStr := d.targetFromParam(c.UserContext(), c.Params("target"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -164,7 +159,7 @@ func (d *Driver) UpdateTarget(c *fiber.Ctx) error {
 		})
 	}
 
-	newTarget := &mongo.Target{
+	newTarget := &model.Target{
 		IPv4:     data.IPv4,
 		IPv6:     data.IPv6,
 		Port:     data.Port,
@@ -174,11 +169,11 @@ func (d *Driver) UpdateTarget(c *fiber.Ctx) error {
 	}
 
 	// update target in database
-	err := d.mongo.Target().Update(context.Background(), target.ID, newTarget)
+	err := d.db.Target().Update(c.UserContext(), target.ID, newTarget)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 
-		if mongo.IsDuplicateKeyError(err) {
+		if errors.Is(err, store.ErrDuplicateKey) {
 			return c.JSON(fiber.Map{
 				"error": "Target with provided data already exists",
 			})
@@ -196,10 +191,10 @@ func (d *Driver) UpdateTarget(c *fiber.Ctx) error {
 }
 
 func (d *Driver) DeleteTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse target param
-	target, errStr := d.targetFromParam(c.Params("target"))
+	target, errStr := d.targetFromParam(c.UserContext(), c.Params("target"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -215,25 +210,10 @@ func (d *Driver) DeleteTarget(c *fiber.Ctx) error {
 		})
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// delete target from database
-		err := d.mongo.Target().Delete(ctx, target.ID)
-		if err != nil {
-			return nil, errors.New("Cannot delete target")
-		}
-
-		return nil, nil
-	})
-	if err != nil {
+	if err := d.db.Target().Delete(c.UserContext(), target.ID); err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Cannot delete target",
 		})
 	}
 
@@ -244,10 +224,10 @@ func (d *Driver) DeleteTarget(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetTargetsByCustomer(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// check if user has access to customer
-	customer, errStr := d.customerFromParam(c.Params("customer"))
+	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -262,7 +242,7 @@ func (d *Driver) GetTargetsByCustomer(c *fiber.Ctx) error {
 		})
 	}
 
-	targets, err := d.mongo.Target().Search(context.Background(), customer.ID, c.Query("search"))
+	targets, err := d.db.Target().Search(c.UserContext(), customer.ID, c.Query("search"))
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -275,7 +255,7 @@ func (d *Driver) GetTargetsByCustomer(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse target param
 	targetParam := c.Params("target")
@@ -295,7 +275,7 @@ func (d *Driver) GetTarget(c *fiber.Ctx) error {
 	}
 
 	// get target by customer and ID from database
-	target, err := d.mongo.Target().GetByIDPipeline(context.Background(), targetID)
+	target, err := d.db.Target().GetByIDWithRelations(c.UserContext(), targetID)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -314,7 +294,7 @@ func (d *Driver) GetTarget(c *fiber.Ctx) error {
 	return c.JSON(target)
 }
 
-func (d *Driver) targetFromParam(targetParam string) (*mongo.Target, string) {
+func (d *Driver) targetFromParam(ctx context.Context, targetParam string) (*model.Target, string) {
 	if targetParam == "" {
 		return nil, "Target ID is required"
 	}
@@ -324,7 +304,7 @@ func (d *Driver) targetFromParam(targetParam string) (*mongo.Target, string) {
 		return nil, "Invalid target ID"
 	}
 
-	target, err := d.mongo.Target().GetByIDPipeline(context.Background(), targetID)
+	target, err := d.db.Target().GetByIDWithRelations(ctx, targetID)
 	if err != nil {
 		return nil, "Invalid target ID"
 	}

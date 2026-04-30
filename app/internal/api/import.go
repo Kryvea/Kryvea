@@ -9,7 +9,7 @@ import (
 
 	"github.com/Kryvea/Kryvea/internal/burp"
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/nessus"
 	pocpkg "github.com/Kryvea/Kryvea/internal/poc"
 	"github.com/Kryvea/Kryvea/internal/util"
@@ -23,7 +23,7 @@ type importRequestData struct {
 }
 
 func (d *Driver) ImportVulnerabilities(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	assessmentParam := c.Params("assessment")
 	if assessmentParam == "" {
@@ -41,7 +41,7 @@ func (d *Driver) ImportVulnerabilities(c *fiber.Ctx) error {
 		})
 	}
 
-	assessment, err := d.mongo.Assessment().GetByID(context.Background(), assessmentID)
+	assessment, err := d.db.Assessment().GetByID(c.UserContext(), assessmentID)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -56,7 +56,7 @@ func (d *Driver) ImportVulnerabilities(c *fiber.Ctx) error {
 		})
 	}
 
-	customer, err := d.mongo.Customer().GetByID(context.Background(), assessment.Customer.ID)
+	customer, err := d.db.Customer().GetByID(c.UserContext(), assessment.Customer.ID)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -84,10 +84,10 @@ func (d *Driver) ImportVulnerabilities(c *fiber.Ctx) error {
 
 	var parseErr error
 	switch importData.Source {
-	case mongo.SourceBurp:
-		parseErr = d.ParseBurp(data, *customer, *assessment, user.ID)
-	case mongo.SourceNessus:
-		parseErr = d.ParseNessus(data, *customer, *assessment, user.ID)
+	case model.SourceBurp:
+		parseErr = d.ParseBurp(c.UserContext(), data, *customer, *assessment, user.ID)
+	case model.SourceNessus:
+		parseErr = d.ParseNessus(c.UserContext(), data, *customer, *assessment, user.ID)
 	default:
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -107,36 +107,30 @@ func (d *Driver) ImportVulnerabilities(c *fiber.Ctx) error {
 	})
 }
 
-func (d *Driver) ParseBurp(data []byte, customer mongo.Customer, assessment mongo.Assessment, userID uuid.UUID) (err error) {
+func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Customer, assessment model.Assessment, userID uuid.UUID) (err error) {
 	burpData, err := burp.Parse(data)
 	if err != nil {
 		return err
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
+	_, err = d.db.RunInTx(ctx, func(ctx context.Context) (any, error) {
 		for _, issue := range burpData.Issues {
-			target := &mongo.Target{
+			target := &model.Target{
 				IPv4: issue.Host.IP,
 				FQDN: issue.Host.Name,
 				Tag:  "burp",
 			}
-			targetID, _, err := d.mongo.Target().FirstOrInsert(ctx, target, customer.ID)
+			targetID, _, err := d.db.Target().FirstOrInsert(ctx, target, customer.ID)
 			if err != nil {
 				return nil, err
 			}
 
-			err = d.mongo.Assessment().UpdateTargets(ctx, assessment.ID, targetID)
+			err = d.db.Assessment().UpdateTargets(ctx, assessment.ID, targetID)
 			if err != nil {
 				return nil, err
 			}
 
-			category := &mongo.Category{
+			category := &model.Category{
 				Identifier:         strings.Trim(issue.Type, "\r\n "),
 				Name:               strings.Trim(issue.Name, "\r\n "),
 				Subcategory:        "",
@@ -144,16 +138,16 @@ func (d *Driver) ParseBurp(data []byte, customer mongo.Customer, assessment mong
 				GenericRemediation: map[string]string{"en": strings.Trim(issue.RemediationBackground, "\r\n ")},
 				LanguagesOrder:     []string{"en"},
 				References:         []string{},
-				Source:             mongo.SourceBurp,
+				Source:             model.SourceBurp,
 			}
-			categoryID, _, err := d.mongo.Category().FirstOrInsert(ctx, category)
+			categoryID, _, err := d.db.Category().FirstOrInsert(ctx, category)
 			if err != nil {
 				return nil, err
 			}
 
-			vulnerability := &mongo.Vulnerability{
-				Category: mongo.Category{
-					Model: mongo.Model{
+			vulnerability := &model.Vulnerability{
+				Category: model.Category{
+					Model: model.Model{
 						ID: categoryID,
 					},
 				},
@@ -161,38 +155,38 @@ func (d *Driver) ParseBurp(data []byte, customer mongo.Customer, assessment mong
 				CVSSv3:      cvss.InfoVector3,
 				CVSSv31:     cvss.InfoVector31,
 				CVSSv4:      cvss.InfoVector4,
-				Status:      strings.Trim(mongo.VulnerabilityStatusOpen, "\r\n "),
+				Status:      strings.Trim(model.VulnerabilityStatusOpen, "\r\n "),
 				References:  []string{strings.Trim(issue.References, "\r\n ")},
 				Description: strings.Trim(issue.IssueDetail, "\r\n "),
 				Remediation: strings.Trim(issue.RemediationDetail, "\r\n "),
-				Target: mongo.Target{
-					Model: mongo.Model{ID: targetID},
+				Target: model.Target{
+					Model: model.Model{ID: targetID},
 				},
-				Assessment: mongo.Assessment{
-					Model: mongo.Model{
+				Assessment: model.Assessment{
+					Model: model.Model{
 						ID: assessment.ID,
 					},
 				},
-				Customer: mongo.Customer{
-					Model: mongo.Model{
+				Customer: model.Customer{
+					Model: model.Model{
 						ID: customer.ID,
 					},
 				},
-				User: mongo.User{
-					Model: mongo.Model{
+				User: model.User{
+					Model: model.Model{
 						ID: userID,
 					},
 				},
 			}
-			vulnerabilityID, err := d.mongo.Vulnerability().Insert(ctx, vulnerability)
+			vulnerabilityID, err := d.db.Vulnerability().Insert(ctx, vulnerability)
 			if err != nil {
 				return nil, err
 			}
 
 			items := len(issue.RequestResponses) + len(issue.CollaboratorEvents) + len(issue.InfiltratorEvents)
-			poc := mongo.Poc{
+			poc := model.Poc{
 				VulnerabilityID: vulnerabilityID,
-				Pocs:            make([]mongo.PocItem, 0, items),
+				Pocs:            make([]model.PocItem, 0, items),
 			}
 			i := 0
 			for _, requestResponse := range issue.RequestResponses {
@@ -210,7 +204,7 @@ func (d *Driver) ParseBurp(data []byte, customer mongo.Customer, assessment mong
 					}
 				}
 
-				poc.Pocs = append(poc.Pocs, mongo.PocItem{
+				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index:    i,
 					Type:     pocpkg.PocTypeRequest,
 					Request:  strings.Trim(string(request), "\r\n "),
@@ -236,7 +230,7 @@ func (d *Driver) ParseBurp(data []byte, customer mongo.Customer, assessment mong
 					}
 				}
 
-				poc.Pocs = append(poc.Pocs, mongo.PocItem{
+				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index: i,
 					Type:  pocpkg.PocTypeText,
 					TextData: strings.Trim(fmt.Sprintf(`Interaction Type: %s
@@ -257,7 +251,7 @@ Lookup Host: %s`,
 				i++
 			}
 			for _, infiltratorEvent := range issue.InfiltratorEvents {
-				poc.Pocs = append(poc.Pocs, mongo.PocItem{
+				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index: i,
 					Type:  pocpkg.PocTypeText,
 					TextData: strings.Trim(fmt.Sprintf(`Parameter Name: %s
@@ -276,7 +270,7 @@ Parameter Value: %s`,
 				i++
 			}
 
-			err = d.mongo.Poc().Upsert(ctx, &poc)
+			err = d.db.Poc().Upsert(ctx, &poc)
 			if err != nil {
 				return nil, err
 			}
@@ -288,31 +282,35 @@ Parameter Value: %s`,
 	return err
 }
 
-func (d *Driver) ParseNessus(data []byte, customer mongo.Customer, assessment mongo.Assessment, userID uuid.UUID) (err error) {
+func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Customer, assessment model.Assessment, userID uuid.UUID) (err error) {
 	nessusData, err := nessus.Parse(data)
 	if err != nil {
 		return err
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
+	_, err = d.db.RunInTx(ctx, func(ctx context.Context) (any, error) {
 		if nessusData.Report == nil {
 			return nil, errors.New("report data is empty")
 		}
 
+		categoryCache := make(map[string]uuid.UUID)
+		targetCache := make(map[string]uuid.UUID)
+
+		totalItems := 0
 		for _, host := range nessusData.Report.ReportHosts {
-			if host == nil {
+			if host != nil {
+				totalItems += len(host.ReportItems)
+			}
+		}
+		vulns := make([]*model.Vulnerability, 0, totalItems)
+		pocs := make([]model.Poc, 0, totalItems)
+
+		for _, host := range nessusData.Report.ReportHosts {
+			if host == nil || host.HostProperties == nil {
 				continue
 			}
+
 			var hostIP, hostFQDN, hostRDNS string
-			if host.HostProperties == nil {
-				continue
-			}
 			for _, property := range host.HostProperties.Tag {
 				switch property.Name {
 				case "host-ip":
@@ -327,20 +325,15 @@ func (d *Driver) ParseNessus(data []byte, customer mongo.Customer, assessment mo
 				hostFQDN = ""
 			}
 
-			target := &mongo.Target{
-				IPv4: hostIP,
-				FQDN: hostFQDN,
-				Tag:  "nessus",
-			}
-
-			targetID, _, err := d.mongo.Target().FirstOrInsert(ctx, target, customer.ID)
-			if err != nil {
-				return nil, err
-			}
-
-			err = d.mongo.Assessment().UpdateTargets(ctx, assessment.ID, targetID)
-			if err != nil {
-				return nil, err
+			targetKey := hostIP + "|" + hostFQDN
+			targetID, ok := targetCache[targetKey]
+			if !ok {
+				target := &model.Target{IPv4: hostIP, FQDN: hostFQDN, Tag: "nessus"}
+				targetID, _, err = d.db.Target().FirstOrInsert(ctx, target, customer.ID)
+				if err != nil {
+					return nil, err
+				}
+				targetCache[targetKey] = targetID
 			}
 
 			for _, item := range host.ReportItems {
@@ -348,106 +341,85 @@ func (d *Driver) ParseNessus(data []byte, customer mongo.Customer, assessment mo
 					continue
 				}
 
-				poc := mongo.Poc{
-					Pocs: make([]mongo.PocItem, 0, 1),
-				}
-				category := &mongo.Category{
-					Identifier:  strings.Trim(item.PluginID, "\r\n "),
-					Name:        strings.Trim(item.PluginName, "\r\n "),
-					Subcategory: "",
-					GenericDescription: map[string]string{
-						"en": strings.Trim(item.Description, "\r\n "),
-					},
-					GenericRemediation: map[string]string{
-						"en": strings.Trim(item.Solution, "\r\n "),
-					},
-					LanguagesOrder: []string{"en"},
-					References:     strings.Split(item.SeeAlso, "\n"),
-					Source:         mongo.SourceNessus,
-				}
-
-				categoryID, _, err := d.mongo.Category().FirstOrInsert(ctx, category)
-				if err != nil {
-					return nil, err
+				catKey := item.PluginID
+				categoryID, ok := categoryCache[catKey]
+				if !ok {
+					category := &model.Category{
+						Identifier:         strings.Trim(item.PluginID, "\r\n "),
+						Name:               strings.Trim(item.PluginName, "\r\n "),
+						GenericDescription: map[string]string{"en": strings.Trim(item.Description, "\r\n ")},
+						GenericRemediation: map[string]string{"en": strings.Trim(item.Solution, "\r\n ")},
+						LanguagesOrder:     []string{"en"},
+						References:         strings.Split(item.SeeAlso, "\n"),
+						Source:             model.SourceNessus,
+					}
+					categoryID, _, err = d.db.Category().FirstOrInsert(ctx, category)
+					if err != nil {
+						return nil, err
+					}
+					categoryCache[catKey] = categoryID
 				}
 
-				vulnerability := &mongo.Vulnerability{
-					Category: mongo.Category{
-						Model: mongo.Model{
-							ID: categoryID,
-						},
-					},
-					CVSSv2:        cvss.InfoVector2,
-					CVSSv3:        cvss.InfoVector3,
-					CVSSv31:       cvss.InfoVector31,
-					CVSSv4:        cvss.InfoVector4,
-					DetailedTitle: "",
-					Status:        mongo.VulnerabilityStatusOpen,
-					References:    []string{},
-					Description:   strings.Trim(item.Synopsis, "\r\n "),
-					Remediation:   strings.Trim(item.Solution, "\r\n "),
-					Target: mongo.Target{
-						Model: mongo.Model{ID: targetID},
-					},
-					Assessment: mongo.Assessment{
-						Model: mongo.Model{
-							ID: assessment.ID,
-						},
-					},
-					Customer: mongo.Customer{
-						Model: mongo.Model{
-							ID: customer.ID,
-						},
-					},
-					User: mongo.User{
-						Model: mongo.Model{
-							ID: userID,
-						},
-					},
+				vuln := &model.Vulnerability{
+					Category:    model.Category{Model: model.Model{ID: categoryID}},
+					CVSSv2:      cvss.InfoVector2,
+					CVSSv3:      cvss.InfoVector3,
+					CVSSv31:     cvss.InfoVector31,
+					CVSSv4:      cvss.InfoVector4,
+					Status:      model.VulnerabilityStatusOpen,
+					References:  []string{},
+					Description: strings.Trim(item.Synopsis, "\r\n "),
+					Remediation: strings.Trim(item.Solution, "\r\n "),
+					Target:      model.Target{Model: model.Model{ID: targetID}},
+					Assessment:  model.Assessment{Model: model.Model{ID: assessment.ID}},
+					Customer:    model.Customer{Model: model.Model{ID: customer.ID}},
+					User:        model.User{Model: model.Model{ID: userID}},
 				}
 
-				// Parse cvss2
 				if item.CvssVector != "" {
 					vector, err := cvss.ParseVector(item.CvssVector, cvss.Cvss2, assessment.Language)
 					if err != nil {
 						return nil, err
 					}
-
-					vulnerability.CVSSv2 = *vector
+					vuln.CVSSv2 = *vector
 				}
-
-				// Parse cvss3 as cvss31
 				if item.Cvss3Vector != "" {
 					vectorString := strings.Replace(item.Cvss3Vector, cvss.Cvss3, cvss.Cvss31, 1)
 					vector, err := cvss.ParseVector(vectorString, cvss.Cvss31, assessment.Language)
 					if err != nil {
 						return nil, err
 					}
-
-					vulnerability.CVSSv31 = *vector
+					vuln.CVSSv31 = *vector
 				}
 
-				vulnerabilityID, err := d.mongo.Vulnerability().Insert(ctx, vulnerability)
-				if err != nil {
-					return nil, err
-				}
-
-				poc.Pocs = append(poc.Pocs, mongo.PocItem{
-					Index:        0,
-					Type:         "text",
-					TextLanguage: "plaintext",
-					TextData:     strings.Trim(item.PluginOutput, "\r\n "),
+				pocs = append(pocs, model.Poc{
+					Pocs: []model.PocItem{{
+						Type:         "text",
+						TextLanguage: "plaintext",
+						TextData:     strings.Trim(item.PluginOutput, "\r\n "),
+					}},
 				})
-				poc.VulnerabilityID = vulnerabilityID
-
-				err = d.mongo.Poc().Upsert(ctx, &poc)
-				if err != nil {
-					return nil, err
-				}
+				vulns = append(vulns, vuln)
 			}
 		}
 
-		return nil, nil
+		if err := d.db.Vulnerability().BulkInsert(ctx, vulns); err != nil {
+			return nil, err
+		}
+
+		for i := range pocs {
+			pocs[i].VulnerabilityID = vulns[i].ID
+		}
+
+		if err := d.db.Poc().BulkInsertNew(ctx, pocs); err != nil {
+			return nil, err
+		}
+
+		uniqueTargetIDs := make([]uuid.UUID, 0, len(targetCache))
+		for _, id := range targetCache {
+			uniqueTargetIDs = append(uniqueTargetIDs, id)
+		}
+		return nil, d.db.Assessment().BulkUpdateTargets(ctx, assessment.ID, uniqueTargetIDs)
 	})
 
 	return err

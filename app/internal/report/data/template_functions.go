@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/google/uuid"
 )
 
@@ -27,12 +27,12 @@ var (
 //
 //	{{ vulnIndex . }}          — when ranging over .Vulnerabilities
 //	{{ vulnIndex .Vulnerability }} — when ranging over .AggregatedVulnerabilities
-func MakeVulnIndexFunc(vulnerabilities []mongo.Vulnerability) func(mongo.Vulnerability) int {
+func MakeVulnIndexFunc(vulnerabilities []model.Vulnerability) func(model.Vulnerability) int {
 	indexMap := make(map[uuid.UUID]int, len(vulnerabilities))
 	for i, v := range vulnerabilities {
 		indexMap[v.ID] = i + 1
 	}
-	return func(v mongo.Vulnerability) int {
+	return func(v model.Vulnerability) int {
 		return indexMap[v.ID]
 	}
 }

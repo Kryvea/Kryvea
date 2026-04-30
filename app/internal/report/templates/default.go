@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	pocpkg "github.com/Kryvea/Kryvea/internal/poc"
 	reportdata "github.com/Kryvea/Kryvea/internal/report/data"
 	"github.com/Kryvea/Kryvea/internal/util"
@@ -15,9 +15,9 @@ import (
 )
 
 type ReportDataJSON struct {
-	Customer         *mongo.Customer       `json:"customer"`
-	Assessment       *mongo.Assessment     `json:"assessment"`
-	Vulnerabilities  []mongo.Vulnerability `json:"vulnerabilities"`
+	Customer         *model.Customer       `json:"customer"`
+	Assessment       *model.Assessment     `json:"assessment"`
+	Vulnerabilities  []model.Vulnerability `json:"vulnerabilities"`
 	DeliveryDateTime time.Time
 	MaxCVSS          map[string]cvss.Vector
 }

@@ -3,27 +3,27 @@ package reportdata
 import (
 	"testing"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 )
 
 func TestHighlight(t *testing.T) {
 	tests := []struct {
 		name       string
 		text       string
-		highlights []mongo.HighlightedText
-		expected   []mongo.Highlighted
+		highlights []model.HighlightedText
+		expected   []model.Highlighted
 	}{
 		{
 			name: "single highlight",
 			text: "This is a sample text for testing highlights.",
-			highlights: []mongo.HighlightedText{
+			highlights: []model.HighlightedText{
 				{
-					Start: mongo.LineCol{Line: 1, Col: 11},
-					End:   mongo.LineCol{Line: 1, Col: 17},
+					Start: model.LineCol{Line: 1, Col: 11},
+					End:   model.LineCol{Line: 1, Col: 17},
 					Color: "FF0000",
 				},
 			},
-			expected: []mongo.Highlighted{
+			expected: []model.Highlighted{
 				{Text: "This is a "},
 				{Text: "sample", Color: "FF0000"},
 				{Text: " text for testing highlights."},
@@ -32,19 +32,19 @@ func TestHighlight(t *testing.T) {
 		{
 			name: "multiple highlights",
 			text: "Highlighting multiple sections in this text.",
-			highlights: []mongo.HighlightedText{
+			highlights: []model.HighlightedText{
 				{
-					Start: mongo.LineCol{Line: 1, Col: 1},
-					End:   mongo.LineCol{Line: 1, Col: 13},
+					Start: model.LineCol{Line: 1, Col: 1},
+					End:   model.LineCol{Line: 1, Col: 13},
 					Color: "00FF00",
 				},
 				{
-					Start: mongo.LineCol{Line: 1, Col: 22},
-					End:   mongo.LineCol{Line: 1, Col: 31},
+					Start: model.LineCol{Line: 1, Col: 22},
+					End:   model.LineCol{Line: 1, Col: 31},
 					Color: "0000FF",
 				},
 			},
-			expected: []mongo.Highlighted{
+			expected: []model.Highlighted{
 				{Text: "Highlighting", Color: "00FF00"},
 				{Text: " multiple"},
 				{Text: " sections", Color: "0000FF"},
@@ -54,19 +54,19 @@ func TestHighlight(t *testing.T) {
 		{
 			name: "overlapping highlights",
 			text: "Overlapping highlights can be tricky.",
-			highlights: []mongo.HighlightedText{
+			highlights: []model.HighlightedText{
 				{
-					Start: mongo.LineCol{Line: 1, Col: 1},
-					End:   mongo.LineCol{Line: 1, Col: 12},
+					Start: model.LineCol{Line: 1, Col: 1},
+					End:   model.LineCol{Line: 1, Col: 12},
 					Color: "FF00FF",
 				},
 				{
-					Start: mongo.LineCol{Line: 1, Col: 5},
-					End:   mongo.LineCol{Line: 1, Col: 23},
+					Start: model.LineCol{Line: 1, Col: 5},
+					End:   model.LineCol{Line: 1, Col: 23},
 					Color: "00FFFF",
 				},
 			},
-			expected: []mongo.Highlighted{
+			expected: []model.Highlighted{
 				{Text: "Over", Color: "FF00FF"},
 				{Text: "lapping highlights", Color: "00FFFF"},
 				{Text: " can be tricky."},
@@ -75,19 +75,19 @@ func TestHighlight(t *testing.T) {
 		{
 			name: "highlight at text boundaries",
 			text: "Boundary highlights.",
-			highlights: []mongo.HighlightedText{
+			highlights: []model.HighlightedText{
 				{
-					Start: mongo.LineCol{Line: 1, Col: 1},
-					End:   mongo.LineCol{Line: 1, Col: 9},
+					Start: model.LineCol{Line: 1, Col: 1},
+					End:   model.LineCol{Line: 1, Col: 9},
 					Color: "123456",
 				},
 				{
-					Start: mongo.LineCol{Line: 1, Col: 10},
-					End:   mongo.LineCol{Line: 1, Col: 21},
+					Start: model.LineCol{Line: 1, Col: 10},
+					End:   model.LineCol{Line: 1, Col: 21},
 					Color: "654321",
 				},
 			},
-			expected: []mongo.Highlighted{
+			expected: []model.Highlighted{
 				{Text: "Boundary", Color: "123456"},
 				{Text: " "},
 				{Text: "highlights.", Color: "654321"},
@@ -96,14 +96,14 @@ func TestHighlight(t *testing.T) {
 		{
 			name: "highlight at text boundaries multiline",
 			text: "Boundary highlights.\nThis is a new line\nThird line.\nVery long fourth line here.",
-			highlights: []mongo.HighlightedText{
+			highlights: []model.HighlightedText{
 				{
-					Start: mongo.LineCol{Line: 1, Col: 10},
-					End:   mongo.LineCol{Line: 4, Col: 5},
+					Start: model.LineCol{Line: 1, Col: 10},
+					End:   model.LineCol{Line: 4, Col: 5},
 					Color: "123456",
 				},
 			},
-			expected: []mongo.Highlighted{
+			expected: []model.Highlighted{
 				{Text: "Boundary "},
 				{Text: "highlights.\nThis is a new line\nThird line.\nVery", Color: "123456"},
 				{Text: " long fourth line here."},
@@ -112,8 +112,8 @@ func TestHighlight(t *testing.T) {
 		{
 			name:       "no highlights",
 			text:       "No highlights in this text.",
-			highlights: []mongo.HighlightedText{},
-			expected: []mongo.Highlighted{
+			highlights: []model.HighlightedText{},
+			expected: []model.Highlighted{
 				{Text: "No highlights in this text."},
 			},
 		},
@@ -121,21 +121,21 @@ func TestHighlight(t *testing.T) {
 			name:       "nil highlights",
 			text:       "nil highlights in this text.",
 			highlights: nil,
-			expected: []mongo.Highlighted{
+			expected: []model.Highlighted{
 				{Text: "nil highlights in this text."},
 			},
 		},
 		{
 			name: "multiline single highlight",
 			text: "This is line one.\nThis is line two.\nThis is line three.",
-			highlights: []mongo.HighlightedText{
+			highlights: []model.HighlightedText{
 				{
-					Start: mongo.LineCol{Line: 2, Col: 6},
-					End:   mongo.LineCol{Line: 2, Col: 11},
+					Start: model.LineCol{Line: 2, Col: 6},
+					End:   model.LineCol{Line: 2, Col: 11},
 					Color: "FF5733",
 				},
 			},
-			expected: []mongo.Highlighted{
+			expected: []model.Highlighted{
 				{Text: "This is line one.\nThis "},
 				{Text: "is li", Color: "FF5733"},
 				{Text: "ne two.\nThis is line three."},

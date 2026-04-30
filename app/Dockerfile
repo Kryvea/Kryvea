@@ -1,4 +1,4 @@
-FROM golang:1.24.4-bookworm AS go-builder
+FROM golang:1.25-bookworm AS go-builder
 WORKDIR /kryvea
 COPY . .
 RUN make

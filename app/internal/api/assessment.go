@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/report"
 	reportdata "github.com/Kryvea/Kryvea/internal/report/data"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gofiber/fiber/v2"
@@ -25,7 +27,7 @@ type assessmentRequestData struct {
 	KickoffDateTime time.Time            `json:"kickoff_date_time"`
 	Status          string               `json:"status"`
 	Targets         []string             `json:"targets"`
-	Type            mongo.AssessmentType `json:"type"`
+	Type            model.AssessmentType `json:"type"`
 	CVSSVersions    map[string]bool      `json:"cvss_versions"`
 	Environment     string               `json:"environment"`
 	TestingType     string               `json:"testing_type"`
@@ -34,7 +36,7 @@ type assessmentRequestData struct {
 }
 
 func (d *Driver) AddAssessment(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse request body
 	data := &assessmentRequestData{}
@@ -46,7 +48,7 @@ func (d *Driver) AddAssessment(c *fiber.Ctx) error {
 	}
 
 	// check if user has access to customer
-	customer, errStr := d.customerFromParam(data.CustomerID)
+	customer, errStr := d.customerFromParam(c.UserContext(), data.CustomerID)
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -71,7 +73,7 @@ func (d *Driver) AddAssessment(c *fiber.Ctx) error {
 	}
 
 	// parse targets
-	targets := []mongo.Target{}
+	targets := []model.Target{}
 	for _, target := range data.Targets {
 		targetID, err := util.ParseUUID(target)
 		if err != nil {
@@ -80,14 +82,14 @@ func (d *Driver) AddAssessment(c *fiber.Ctx) error {
 				"error": "Invalid target ID",
 			})
 		}
-		targets = append(targets, mongo.Target{
-			Model: mongo.Model{
+		targets = append(targets, model.Target{
+			Model: model.Model{
 				ID: targetID,
 			},
 		})
 	}
 
-	assessment := &mongo.Assessment{
+	assessment := &model.Assessment{
 		Name:            data.Name,
 		Language:        data.Language,
 		StartDateTime:   data.StartDateTime,
@@ -103,11 +105,11 @@ func (d *Driver) AddAssessment(c *fiber.Ctx) error {
 	}
 
 	// insert assessment into database
-	assessmentID, err := d.mongo.Assessment().Insert(context.Background(), assessment, customer.ID)
+	assessmentID, err := d.db.Assessment().Insert(c.UserContext(), assessment, customer.ID)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 
-		if mongo.IsDuplicateKeyError(err) {
+		if errors.Is(err, store.ErrDuplicateKey) {
 			return c.JSON(fiber.Map{
 				"error": fmt.Sprintf("Assessment \"%s\" already exists under customer \"%s\"", assessment.Name, customer.Name),
 			})
@@ -126,7 +128,7 @@ func (d *Driver) AddAssessment(c *fiber.Ctx) error {
 }
 
 func (d *Driver) SearchAssessments(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse query parameters
 	customerParam := c.Query("customer")
@@ -135,7 +137,7 @@ func (d *Driver) SearchAssessments(c *fiber.Ctx) error {
 	var customerID uuid.UUID
 	if customerParam != "" {
 		// check if user can access the customer
-		customer, errStr := d.customerFromParam(customerParam)
+		customer, errStr := d.customerFromParam(c.UserContext(), customerParam)
 		if errStr != "" {
 			c.Status(fiber.StatusBadRequest)
 			return c.JSON(fiber.Map{
@@ -158,12 +160,12 @@ func (d *Driver) SearchAssessments(c *fiber.Ctx) error {
 	for _, uc := range user.Customers {
 		customers = append(customers, uc.ID)
 	}
-	if user.Role == mongo.RoleAdmin {
+	if user.Role == model.RoleAdmin {
 		customers = nil
 	}
 
 	// retrieve assessments
-	assessments, err := d.mongo.Assessment().Search(context.Background(), customers, customerID, nameParam)
+	assessments, err := d.db.Assessment().Search(c.UserContext(), customers, customerID, nameParam)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -176,10 +178,10 @@ func (d *Driver) SearchAssessments(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetAssessmentsByCustomer(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// check if user can access the customer
-	customer, errStr := d.customerFromParam(c.Params("customer"))
+	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -195,7 +197,7 @@ func (d *Driver) GetAssessmentsByCustomer(c *fiber.Ctx) error {
 	}
 
 	// retrieve assessments
-	assessments, err := d.mongo.Assessment().GetByCustomerID(context.Background(), customer.ID)
+	assessments, err := d.db.Assessment().GetByCustomerID(c.UserContext(), customer.ID)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -219,7 +221,7 @@ func (d *Driver) GetAssessmentsByCustomer(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetAssessment(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 	// parse assessment param
 	assessmentParam := c.Params("assessment")
 	if assessmentParam == "" {
@@ -237,7 +239,7 @@ func (d *Driver) GetAssessment(c *fiber.Ctx) error {
 		})
 	}
 
-	assessment, err := d.mongo.Assessment().GetByIDPipeline(context.Background(), assessmentID)
+	assessment, err := d.db.Assessment().GetByIDWithRelations(c.UserContext(), assessmentID)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -266,11 +268,11 @@ func (d *Driver) GetAssessment(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetOwnedAssessments(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	if len(user.Assessments) == 0 {
 		c.Status(fiber.StatusOK)
-		return c.JSON([]mongo.Assessment{})
+		return c.JSON([]model.Assessment{})
 	}
 
 	// map user assessments IDs
@@ -280,7 +282,7 @@ func (d *Driver) GetOwnedAssessments(c *fiber.Ctx) error {
 	}
 
 	// get assessments from database
-	assessments, err := d.mongo.Assessment().GetMultipleByID(context.Background(), userAssessments)
+	assessments, err := d.db.Assessment().GetMultipleByID(c.UserContext(), userAssessments)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -304,10 +306,10 @@ func (d *Driver) GetOwnedAssessments(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateAssessment(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse assessment param
-	assessment, errStr := d.assessmentFromParam(c.Params("assessment"))
+	assessment, errStr := d.assessmentFromParam(c.UserContext(), c.Params("assessment"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -342,7 +344,7 @@ func (d *Driver) UpdateAssessment(c *fiber.Ctx) error {
 	}
 
 	// parse targets
-	targets := []mongo.Target{}
+	targets := []model.Target{}
 	for _, target := range data.Targets {
 		targetID, err := util.ParseUUID(target)
 		if err != nil {
@@ -351,14 +353,14 @@ func (d *Driver) UpdateAssessment(c *fiber.Ctx) error {
 				"error": "Invalid target ID",
 			})
 		}
-		targets = append(targets, mongo.Target{
-			Model: mongo.Model{
+		targets = append(targets, model.Target{
+			Model: model.Model{
 				ID: targetID,
 			},
 		})
 	}
 
-	newAssessment := &mongo.Assessment{
+	newAssessment := &model.Assessment{
 		Name:            data.Name,
 		Language:        data.Language,
 		StartDateTime:   data.StartDateTime,
@@ -374,11 +376,11 @@ func (d *Driver) UpdateAssessment(c *fiber.Ctx) error {
 	}
 
 	// update assessment in database
-	err := d.mongo.Assessment().Update(context.Background(), assessment.ID, newAssessment)
+	err := d.db.Assessment().Update(c.UserContext(), assessment.ID, newAssessment)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 
-		if mongo.IsDuplicateKeyError(err) {
+		if errors.Is(err, store.ErrDuplicateKey) {
 			return c.JSON(fiber.Map{
 				"error": fmt.Sprintf("Assessment \"%s\" already exists under customer \"%s\"", newAssessment.Name, assessment.Customer.Name),
 			})
@@ -396,10 +398,10 @@ func (d *Driver) UpdateAssessment(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateAssessmentStatus(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse assessment param
-	assessment, errStr := d.assessmentFromParam(c.Params("assessment"))
+	assessment, errStr := d.assessmentFromParam(c.UserContext(), c.Params("assessment"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -433,12 +435,12 @@ func (d *Driver) UpdateAssessmentStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	newAssessmentStatus := &mongo.Assessment{
+	newAssessmentStatus := &model.Assessment{
 		Status: data.Status,
 	}
 
 	// update assessment in database
-	err := d.mongo.Assessment().UpdateStatus(context.Background(), assessment.ID, newAssessmentStatus)
+	err := d.db.Assessment().UpdateStatus(c.UserContext(), assessment.ID, newAssessmentStatus)
 	if err != nil {
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
@@ -453,10 +455,10 @@ func (d *Driver) UpdateAssessmentStatus(c *fiber.Ctx) error {
 }
 
 func (d *Driver) DeleteAssessment(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse assessment param
-	assessment, errStr := d.assessmentFromParam(c.Params("assessment"))
+	assessment, errStr := d.assessmentFromParam(c.UserContext(), c.Params("assessment"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -472,28 +474,14 @@ func (d *Driver) DeleteAssessment(c *fiber.Ctx) error {
 		})
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// delete assessment from database
-		err := d.mongo.Assessment().Delete(ctx, assessment.ID)
-		if err != nil {
-			return nil, errors.New("Cannot delete assessment")
-		}
-
-		return nil, nil
-	})
-	if err != nil {
+	if err := d.db.Assessment().Delete(c.UserContext(), assessment.ID); err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Cannot delete assessment",
 		})
 	}
 
+	d.gcFilesAsync()
 	c.Status(fiber.StatusOK)
 	return c.JSON(fiber.Map{
 		"message": "Assessment deleted",
@@ -501,10 +489,10 @@ func (d *Driver) DeleteAssessment(c *fiber.Ctx) error {
 }
 
 func (d *Driver) CloneAssessment(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse assessment param
-	assessment, errStr := d.assessmentFromParam(c.Params("assessment"))
+	assessment, errStr := d.assessmentFromParam(c.UserContext(), c.Params("assessment"))
 	if errStr != "" {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -539,17 +527,11 @@ func (d *Driver) CloneAssessment(c *fiber.Ctx) error {
 		data.Name = assessment.Name + " (Clone)"
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	cloneAssessmentID, err := session.WithTransaction(func(ctx context.Context) (any, error) {
+	cloneAssessmentID, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		// clone assessment
-		cloneAssessmentID, err := d.mongo.Assessment().Clone(ctx, assessment.ID, data.Name, data.IncludePocs)
+		cloneAssessmentID, err := d.db.Assessment().Clone(ctx, assessment.ID, data.Name, data.IncludePocs)
 		if err != nil {
-			if mongo.IsDuplicateKeyError(err) {
+			if errors.Is(err, store.ErrDuplicateKey) {
 				return uuid.Nil, fmt.Errorf("Assessment \"%s\" already exists", assessment.Name)
 			}
 
@@ -582,7 +564,7 @@ type exportRequestData struct {
 }
 
 func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
 	// parse assessment param
 	assessmentParam := c.Params("assessment")
@@ -601,7 +583,7 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 		})
 	}
 
-	assessment, err := d.mongo.Assessment().GetByIDPipeline(context.Background(), assessmentID)
+	assessment, err := d.db.Assessment().GetByIDWithRelations(c.UserContext(), assessmentID)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -610,7 +592,7 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 	}
 
 	// check if user has access to customer
-	customer, err := d.mongo.Customer().GetByID(context.Background(), assessment.Customer.ID)
+	customer, err := d.db.Customer().GetByID(c.UserContext(), assessment.Customer.ID)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -626,7 +608,7 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 	}
 
 	if customer.LogoID != uuid.Nil {
-		logoData, _, err := d.mongo.FileReference().ReadByID(context.Background(), customer.LogoID)
+		logoData, _, err := d.db.FileReference().ReadByID(c.UserContext(), customer.LogoID)
 		if err != nil {
 			c.Status(fiber.StatusInternalServerError)
 			return c.JSON(fiber.Map{
@@ -661,7 +643,7 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 
 	if _, ok := report.ReportTemplateMap[data.Type]; ok {
 		// validate template
-		template, errStr := d.templateFromParam(data.Template)
+		template, errStr := d.templateFromParam(c.UserContext(), data.Template)
 		if errStr != "" {
 			c.Status(fiber.StatusBadRequest)
 			return c.JSON(fiber.Map{
@@ -670,7 +652,7 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 		}
 
 		// retrieve template from database
-		templateBytes, _, err = d.mongo.FileReference().ReadByID(context.Background(), template.FileID)
+		templateBytes, _, err = d.db.FileReference().ReadByID(c.UserContext(), template.FileID)
 		if err != nil {
 			c.Status(fiber.StatusBadRequest)
 			return c.JSON(fiber.Map{
@@ -680,36 +662,23 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 	}
 
 	// retrieve vulnerabilities
-	vulnerabilities, err := d.mongo.Vulnerability().GetByAssessmentIDPocPipeline(context.Background(), assessment.ID, data.IncludeInformationalVulnerabilities)
+	vulnerabilities, err := d.db.Vulnerability().GetByAssessmentIDWithPocs(c.UserContext(), assessment.ID, data.IncludeInformationalVulnerabilities)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
 			"error": "Failed to retrieve vulnerabilities",
 		})
 	}
-
-	// retrieve pocs and aggregate vulnerabilities
 	for i := range vulnerabilities {
-		err := d.mongo.Vulnerability().HydrateCategory(context.Background(), &vulnerabilities[i], assessment.Language)
-		if err != nil {
-			c.Status(fiber.StatusInternalServerError)
-			return c.JSON(fiber.Map{
-				"error": "Failed to hydrate category",
-			})
-		}
+		vulnerabilities[i].Assessment.Language = assessment.Language
+	}
+	model.HydrateCVSSAll(vulnerabilities)
 
-		for j, item := range vulnerabilities[i].Poc.Pocs {
-			if item.ImageID != uuid.Nil {
-				imageData, _, err := d.mongo.FileReference().ReadByID(context.Background(), item.ImageID)
-				if err != nil {
-					c.Status(fiber.StatusInternalServerError)
-					return c.JSON(fiber.Map{
-						"error": "Failed to read image data",
-					})
-				}
-				vulnerabilities[i].Poc.Pocs[j].ImageData = imageData
-			}
-		}
+	if err := d.loadPocImagesParallel(c.UserContext(), vulnerabilities); err != nil {
+		c.Status(fiber.StatusInternalServerError)
+		return c.JSON(fiber.Map{
+			"error": "Failed to read image data",
+		})
 	}
 
 	reportData := &reportdata.ReportData{
@@ -752,7 +721,7 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 	return c.SendStream(bytes.NewBuffer(renderedTemplate))
 }
 
-func (d *Driver) assessmentFromParam(assessmentParam string) (*mongo.Assessment, string) {
+func (d *Driver) assessmentFromParam(ctx context.Context, assessmentParam string) (*model.Assessment, string) {
 	if assessmentParam == "" {
 		return nil, "Assessment ID is required"
 	}
@@ -762,7 +731,7 @@ func (d *Driver) assessmentFromParam(assessmentParam string) (*mongo.Assessment,
 		return nil, "Invalid assessment ID"
 	}
 
-	assessment, err := d.mongo.Assessment().GetByID(context.Background(), assessmentID)
+	assessment, err := d.db.Assessment().GetByID(ctx, assessmentID)
 	if err != nil {
 		return nil, "Invalid assessment ID"
 	}
@@ -773,9 +742,9 @@ func (d *Driver) assessmentFromParam(assessmentParam string) (*mongo.Assessment,
 func (d *Driver) validateAssessmentStatus(data *assessmentRequestData) string {
 	switch data.Status {
 	case
-		mongo.ASSESSMENT_STATUS_ON_HOLD,
-		mongo.ASSESSMENT_STATUS_IN_PROGRESS,
-		mongo.ASSESSMENT_STATUS_COMPLETED:
+		model.ASSESSMENT_STATUS_ON_HOLD,
+		model.ASSESSMENT_STATUS_IN_PROGRESS,
+		model.ASSESSMENT_STATUS_COMPLETED:
 	default:
 		return "Invalid status"
 	}
@@ -825,4 +794,55 @@ func (d *Driver) filterValidCvssVersions(cvssVersions map[string]bool) map[strin
 	}
 
 	return validCvssVersions
+}
+
+func (d *Driver) loadPocImagesParallel(parent context.Context, vulnerabilities []model.Vulnerability) error {
+	const maxWorkers = 8
+
+	type ref struct{ vi, pi int }
+	var refs []ref
+	for i := range vulnerabilities {
+		for j, item := range vulnerabilities[i].Poc.Pocs {
+			if item.ImageID != uuid.Nil {
+				refs = append(refs, ref{vi: i, pi: j})
+			}
+		}
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+
+	sem := make(chan struct{}, maxWorkers)
+	errCh := make(chan error, len(refs))
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	for _, r := range refs {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(r ref) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
+			imageID := vulnerabilities[r.vi].Poc.Pocs[r.pi].ImageID
+			data, _, err := d.db.FileReference().ReadByID(ctx, imageID)
+			if err != nil {
+				errCh <- err
+				cancel()
+				return
+			}
+			vulnerabilities[r.vi].Poc.Pocs[r.pi].ImageData = data
+		}(r)
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -3,12 +3,12 @@ package reportdata
 import (
 	"strings"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 )
 
-func splitText(s string, coordinates []mongo.HighlightedText) []mongo.Highlighted {
+func splitText(s string, coordinates []model.HighlightedText) []model.Highlighted {
 	if len(coordinates) == 0 {
-		return []mongo.Highlighted{
+		return []model.Highlighted{
 			{
 				Text:  escapeXMLString(s),
 				Color: "",
@@ -38,7 +38,7 @@ func splitText(s string, coordinates []mongo.HighlightedText) []mongo.Highlighte
 				coordinates[i].End.Col = len(rows[coordinates[i].End.Line-1])
 			}
 			if coordinates[i].Start.Line != coordinates[i].End.Line {
-				coordinates = append(coordinates, mongo.HighlightedText{})
+				coordinates = append(coordinates, model.HighlightedText{})
 				first, second := coordinates[i], coordinates[i]
 
 				first.End.Line = first.Start.Line
@@ -78,8 +78,8 @@ func splitText(s string, coordinates []mongo.HighlightedText) []mongo.Highlighte
 		}
 	}
 
-	splitted := []mongo.Highlighted{}
-	splitColor := mongo.Highlighted{
+	splitted := []model.Highlighted{}
+	splitColor := model.Highlighted{
 		Text:  "",
 		Color: "",
 	}
@@ -92,7 +92,7 @@ func splitText(s string, coordinates []mongo.HighlightedText) []mongo.Highlighte
 				if splitColor.Text != "" {
 					splitted = append(splitted, splitColor)
 				}
-				splitColor = mongo.Highlighted{}
+				splitColor = model.Highlighted{}
 				builder = strings.Builder{}
 			}
 			builder.WriteByte(rows[i][j])

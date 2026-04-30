@@ -2,10 +2,10 @@ package reportdata
 
 import (
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 )
 
-func GetMaxCvss(vulnerabilities []mongo.Vulnerability, cvssVersions map[string]bool) map[string]cvss.Vector {
+func GetMaxCvss(vulnerabilities []model.Vulnerability, cvssVersions map[string]bool) map[string]cvss.Vector {
 	maxCvss := make(map[string]cvss.Vector)
 
 	for _, vulnerability := range vulnerabilities {
@@ -38,7 +38,7 @@ func GetMaxCvss(vulnerabilities []mongo.Vulnerability, cvssVersions map[string]b
 	return maxCvss
 }
 
-func getVulnerabilitiesOverview(vulnerabilities []mongo.Vulnerability, cvssVersions map[string]bool) map[string]map[string]uint {
+func getVulnerabilitiesOverview(vulnerabilities []model.Vulnerability, cvssVersions map[string]bool) map[string]map[string]uint {
 	vulnerabilityOverview := make(map[string]map[string]uint)
 
 	for _, version := range cvss.CvssVersions {
@@ -77,7 +77,7 @@ func getVulnerabilitiesOverview(vulnerabilities []mongo.Vulnerability, cvssVersi
 	return vulnerabilityOverview
 }
 
-func getTargetsCategoryCounter(vulnerabilities []mongo.Vulnerability, maxVersion string) map[string]uint {
+func getTargetsCategoryCounter(vulnerabilities []model.Vulnerability, maxVersion string) map[string]uint {
 	targetsCategoryCounter := make(map[string]uint)
 
 	for _, vulnerability := range vulnerabilities {
@@ -94,7 +94,7 @@ func getTargetsCategoryCounter(vulnerabilities []mongo.Vulnerability, maxVersion
 	return targetsCategoryCounter
 }
 
-func getOWASPCounter(vulnerabilities []mongo.Vulnerability, maxVersion string) map[string]OWASPCounter {
+func getOWASPCounter(vulnerabilities []model.Vulnerability, maxVersion string) map[string]OWASPCounter {
 	owaspCounter := make(map[string]OWASPCounter)
 
 	highestSeverityByCategoryType := make(map[string]float64)
@@ -139,7 +139,7 @@ func getOWASPCounter(vulnerabilities []mongo.Vulnerability, maxVersion string) m
 	return owaspCounter
 }
 
-func parseHighlights(vulnerabilities []mongo.Vulnerability) {
+func parseHighlights(vulnerabilities []model.Vulnerability) {
 	for i := range vulnerabilities {
 		for j := range vulnerabilities[i].Poc.Pocs {
 			parseHighlightedText(&vulnerabilities[i].Poc.Pocs[j])
@@ -147,7 +147,7 @@ func parseHighlights(vulnerabilities []mongo.Vulnerability) {
 	}
 }
 
-func parseHighlightedText(pocitem *mongo.PocItem) {
+func parseHighlightedText(pocitem *model.PocItem) {
 	pocitem.RequestHighlighted = splitText(pocitem.Request, pocitem.RequestHighlights)
 	pocitem.ResponseHighlighted = splitText(pocitem.Response, pocitem.ResponseHighlights)
 	pocitem.TextHighlighted = splitText(pocitem.TextData, pocitem.TextHighlights)

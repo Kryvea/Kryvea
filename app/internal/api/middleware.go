@@ -1,12 +1,10 @@
 package api
 
 import (
-	"context"
-	"strings"
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/crypto"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gofiber/fiber/v2"
 )
@@ -26,7 +24,7 @@ func (d *Driver) SessionMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	user, err := d.mongo.User().GetByToken(context.Background(), token)
+	user, err := d.db.User().GetByToken(c.UserContext(), token)
 	if err != nil || user.TokenExpiry.Before(time.Now()) || (!user.DisabledAt.IsZero() && user.DisabledAt.Before(time.Now())) {
 		util.ClearCookies(c)
 		c.Status(fiber.StatusUnauthorized)
@@ -48,8 +46,8 @@ func (d *Driver) SessionMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	if time.Until(user.TokenExpiry) < mongo.TokenRefreshThreshold {
-		err := d.mongo.User().RefreshUserToken(context.Background(), user)
+	if time.Until(user.TokenExpiry) < model.TokenRefreshThreshold {
+		err := d.db.User().RefreshUserToken(c.UserContext(), user)
 		if err != nil {
 			c.Status(fiber.StatusInternalServerError)
 			return c.JSON(fiber.Map{
@@ -65,37 +63,12 @@ func (d *Driver) SessionMiddleware(c *fiber.Ctx) error {
 }
 
 func (d *Driver) AdminMiddleware(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	if user.Role != mongo.RoleAdmin {
+	if user.Role != model.RoleAdmin {
 		c.Status(fiber.StatusForbidden)
 		return c.JSON(fiber.Map{
 			"error": "Forbidden",
-		})
-	}
-
-	return c.Next()
-}
-
-func (d *Driver) ContentTypeMiddleware(c *fiber.Ctx) error {
-	method := c.Method()
-	path := c.Path()
-	contentType := c.Get(fiber.HeaderContentType)
-
-	if strings.HasSuffix(path, "/upload") && method == fiber.MethodPost {
-		if !strings.HasPrefix(contentType, fiber.MIMEMultipartForm) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Content-Type must be multipart/form-data",
-			})
-		}
-		return c.Next()
-	}
-
-	if (method == fiber.MethodPost || method == fiber.MethodPatch) &&
-		c.Request().Header.ContentLength() > 0 &&
-		!strings.HasPrefix(contentType, fiber.MIMEApplicationJSON) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Content-Type must be application/json",
 		})
 	}
 

@@ -3,13 +3,19 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
 const (
 	addrEnv          = "KRYVEA_ADDR"
 	rootPathEnv      = "KRYVEA_ROOT_PATH"
 	bodyLimitEnv     = "KRYVEA_BODY_LIMIT_MB"
-	mongoURIEnv      = "KRYVEA_MONGO_URI"
+	pgDSNEnv         = "KRYVEA_PG_DSN"
+	pgMaxConnsEnv    = "KRYVEA_PG_MAX_CONNS"
+	pgMinConnsEnv    = "KRYVEA_PG_MIN_CONNS"
+	pgMaxConnLifeEnv = "KRYVEA_PG_MAX_CONN_LIFETIME"
+	pgMaxConnIdleEnv = "KRYVEA_PG_MAX_CONN_IDLE_TIME"
+	filesDirEnv      = "KRYVEA_FILES_DIR"
 	adminUserEnv     = "KRYVEA_ADMIN_USER"
 	adminPassEnv     = "KRYVEA_ADMIN_PASS"
 	logDirectoryEnv  = "KRYVEA_LOG_DIRECTORY"
@@ -40,8 +46,51 @@ func GetBodyLimitMB() int {
 	return bodyLimit
 }
 
-func GetMongoURI() string {
-	return getEnvConfig(mongoURIEnv, "mongodb://user:password@host:27017")
+// GetPgDSN returns the PostgreSQL connection string.
+func GetPgDSN() string {
+	return getEnvConfig(pgDSNEnv, "postgres://kryvea:kryvea@localhost:5432/kryvea?sslmode=disable")
+}
+
+// GetPgMaxConns maps to sql.DB.SetMaxOpenConns. 0 means "default".
+func GetPgMaxConns() int32 {
+	v, err := strconv.Atoi(os.Getenv(pgMaxConnsEnv))
+	if err != nil || v <= 0 {
+		return 0
+	}
+	return int32(v)
+}
+
+// GetPgMinConns maps to sql.DB.SetMaxIdleConns. 0 means "default".
+func GetPgMinConns() int32 {
+	v, err := strconv.Atoi(os.Getenv(pgMinConnsEnv))
+	if err != nil || v < 0 {
+		return 0
+	}
+	return int32(v)
+}
+
+// GetPgMaxConnLifetime maps to sql.DB.SetConnMaxLifetime. 0 means "default".
+func GetPgMaxConnLifetime() time.Duration {
+	d, err := time.ParseDuration(os.Getenv(pgMaxConnLifeEnv))
+	if err != nil || d <= 0 {
+		return 0
+	}
+	return d
+}
+
+// GetPgMaxConnIdleTime maps to sql.DB.SetConnMaxIdleTime. 0 means "default".
+func GetPgMaxConnIdleTime() time.Duration {
+	d, err := time.ParseDuration(os.Getenv(pgMaxConnIdleEnv))
+	if err != nil || d <= 0 {
+		return 0
+	}
+	return d
+}
+
+// GetFilesDir returns the local directory used to store binary file payloads
+// (logo, template files, PoC images).
+func GetFilesDir() string {
+	return getEnvConfig(filesDirEnv, "/var/lib/kryvea/files")
 }
 
 func GetAdminUser() string {

@@ -1,23 +1,27 @@
 package api
 
 import (
-	"context"
-
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/text/language"
 )
 
+const bytesPerMB = 1024 * 1024
+
 // MaxImageSize is expressed as float64 MB
-// Collective wisdom dictated this
-// I, however, remain in dignified dissent
 type settingRequestData struct {
-	MaxImageSize            float64 `json:"max_image_size" bson:"max_image_size"`
-	DefaultCategoryLanguage string  `json:"default_category_language" bson:"default_category_language"`
+	MaxImageSize            float64 `json:"max_image_size"`
+	DefaultCategoryLanguage string  `json:"default_category_language"`
+}
+
+type settingResponseData struct {
+	ID                      string  `json:"id"`
+	MaxImageSize            float64 `json:"max_image_size"`
+	DefaultCategoryLanguage string  `json:"default_category_language"`
 }
 
 func (d *Driver) GetSettings(c *fiber.Ctx) error {
-	settings, err := d.mongo.Setting().Get(context.Background())
+	settings, err := d.db.Setting().Get(c.UserContext())
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
@@ -25,10 +29,12 @@ func (d *Driver) GetSettings(c *fiber.Ctx) error {
 		})
 	}
 
-	settings.MaxImageSize /= 1024 * 1024
-
 	c.Status(fiber.StatusOK)
-	return c.JSON(settings)
+	return c.JSON(settingResponseData{
+		ID:                      settings.ID.String(),
+		MaxImageSize:            float64(settings.MaxImageSize) / bytesPerMB,
+		DefaultCategoryLanguage: settings.DefaultCategoryLanguage,
+	})
 }
 
 func (d *Driver) UpdateSettings(c *fiber.Ctx) error {
@@ -50,17 +56,13 @@ func (d *Driver) UpdateSettings(c *fiber.Ctx) error {
 		})
 	}
 
-	// Image size is received as Mbytes, convert to bytes
-	maxImageSize := int64(data.MaxImageSize * 1024 * 1024)
-
-	setting := &mongo.Setting{
-		MaxImageSize:            maxImageSize,
-		MaxImageSizeMB:          data.MaxImageSize,
+	setting := &model.Setting{
+		MaxImageSize:            int64(data.MaxImageSize * bytesPerMB),
 		DefaultCategoryLanguage: data.DefaultCategoryLanguage,
 	}
 
 	// insert update into database
-	err := d.mongo.Setting().Update(context.Background(), setting)
+	err := d.db.Setting().Update(c.UserContext(), setting)
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
