@@ -24,8 +24,6 @@ func (ui *UserIndex) Insert(ctx context.Context, user *model.User, password stri
 		return uuid.Nil, err
 	}
 
-	passwordExpiry := timeOrTimeNever(user.PasswordExpiry)
-
 	role := user.Role
 	if role == "" {
 		role = model.RoleUser
@@ -33,10 +31,10 @@ func (ui *UserIndex) Insert(ctx context.Context, user *model.User, password stri
 
 	row := &dbUser{
 		ID:             id,
-		DisabledAt:     timePtrIfSet(user.DisabledAt),
+		DisabledAt:     timePtrOrTimeNever(user.DisabledAt),
 		Username:       user.Username,
 		Password:       hash,
-		PasswordExpiry: passwordExpiry,
+		PasswordExpiry: timeOrTimeNever(user.PasswordExpiry),
 		Role:           role,
 	}
 	if _, err := idbFrom(ctx, ui.driver.db).NewInsert().Model(row).Exec(ctx); err != nil {
@@ -83,7 +81,7 @@ func (ui *UserIndex) Login(ctx context.Context, username, password string) (*mod
 	if !crypto.Compare(password, row.Password) {
 		return nil, store.ErrInvalidCredentials
 	}
-	if row.DisabledAt != nil && !row.DisabledAt.IsZero() && row.DisabledAt.Before(time.Now()) {
+	if row.DisabledAt.Before(time.Now()) {
 		return nil, store.ErrDisabledUser
 	}
 
@@ -390,4 +388,11 @@ func timeOrTimeNever(t time.Time) time.Time {
 		return model.TimeNever
 	}
 	return t
+}
+
+func timePtrOrTimeNever(t time.Time) *time.Time {
+	if t.IsZero() {
+		return &model.TimeNever
+	}
+	return &t
 }
