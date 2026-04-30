@@ -290,8 +290,10 @@ func (d *Driver) seedImmutableRows(ctx context.Context) error {
 
 	if _, err := d.db.NewInsert().Model(&dbCategory{
 		ID:                 model.ImmutableID,
+		Identifier:         "KRYVEA",
+		Name:               "DELETED-CATEGORY",
 		Source:             model.SourceGeneric,
-		GenericDescription: map[string]string{},
+		GenericDescription: map[string]string{"en": "The original category for this vulnerability has been deleted, please select a new one"},
 		GenericRemediation: map[string]string{},
 		LanguagesOrder:     []string{},
 		References:         []string{},
