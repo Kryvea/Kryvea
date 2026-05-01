@@ -5,7 +5,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
+
+	xhtml "golang.org/x/net/html"
 
 	"github.com/Kryvea/Kryvea/internal/burp"
 	"github.com/Kryvea/Kryvea/internal/cvss"
@@ -17,6 +23,16 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
+
+var multiNewline = regexp.MustCompile(`\n{3,}`)
+var whitespaceRun = regexp.MustCompile(`\s+`)
+
+var burpSeverityVector = map[string]string{
+	"Low":      "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
+	"Medium":   "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+	"High":     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+	"Critical": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+}
 
 type importRequestData struct {
 	Source string `json:"source"`
@@ -115,10 +131,27 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 
 	_, err = d.db.RunInTx(ctx, func(ctx context.Context) (any, error) {
 		for _, issue := range burpData.Issues {
+			var hostFQDN string
+			var port int
+			if u, err := url.Parse(issue.Host.Name); err == nil && u.Host != "" {
+				if hostname := u.Hostname(); net.ParseIP(hostname) == nil {
+					hostFQDN = hostname
+				}
+				if p, err := strconv.Atoi(u.Port()); err == nil {
+					port = p
+				}
+			}
 			target := &model.Target{
-				IPv4: issue.Host.IP,
-				FQDN: issue.Host.Name,
+				FQDN: hostFQDN,
+				Port: port,
 				Tag:  "burp",
+			}
+			if ip := net.ParseIP(issue.Host.IP); ip != nil {
+				if ip.To4() != nil {
+					target.IPv4 = issue.Host.IP
+				} else {
+					target.IPv6 = issue.Host.IP
+				}
 			}
 			targetID, _, err := d.db.Target().FirstOrInsert(ctx, target, customer.ID)
 			if err != nil {
@@ -134,10 +167,10 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				Identifier:         strings.Trim(issue.Type, "\r\n "),
 				Name:               strings.Trim(issue.Name, "\r\n "),
 				Subcategory:        "",
-				GenericDescription: map[string]string{"en": strings.Trim(issue.IssueBackground, "\r\n ")},
-				GenericRemediation: map[string]string{"en": strings.Trim(issue.RemediationBackground, "\r\n ")},
+				GenericDescription: map[string]string{"en": htmlToText(issue.IssueBackground)},
+				GenericRemediation: map[string]string{"en": htmlToText(issue.RemediationBackground)},
 				LanguagesOrder:     []string{"en"},
-				References:         []string{},
+				References:         htmlToRefs(issue.VulnerabilityClassifications),
 				Source:             model.SourceBurp,
 			}
 			categoryID, _, err := d.db.Category().FirstOrInsert(ctx, category)
@@ -156,9 +189,12 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				CVSSv31:     cvss.InfoVector31,
 				CVSSv4:      cvss.InfoVector4,
 				Status:      strings.Trim(model.VulnerabilityStatusOpen, "\r\n "),
-				References:  []string{strings.Trim(issue.References, "\r\n ")},
-				Description: strings.Trim(issue.IssueDetail, "\r\n "),
-				Remediation: strings.Trim(issue.RemediationDetail, "\r\n "),
+				References:  htmlToRefs(issue.References),
+				Description: htmlToText(issue.IssueDetail),
+				Remediation: htmlToText(issue.RemediationDetail),
+				GenericRemediation: model.VulnerabilityGeneric{
+					Enabled: true,
+				},
 				Target: model.Target{
 					Model: model.Model{ID: targetID},
 				},
@@ -178,6 +214,13 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 					},
 				},
 			}
+			if vectorStr, ok := burpSeverityVector[issue.Severity]; ok {
+				vector, err := cvss.ParseVector(vectorStr, cvss.Cvss31, assessment.Language)
+				if err != nil {
+					return nil, err
+				}
+				vulnerability.CVSSv31 = *vector
+			}
 			vulnerabilityID, err := d.db.Vulnerability().Insert(ctx, vulnerability)
 			if err != nil {
 				return nil, err
@@ -192,15 +235,23 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 			for _, requestResponse := range issue.RequestResponses {
 				var request, response []byte
 				if requestResponse.Request != nil {
-					request, err = base64.StdEncoding.DecodeString(requestResponse.Request.Base64)
-					if err != nil {
-						return nil, fmt.Errorf("cannot decode request: %w", err)
+					if requestResponse.Request.Base64 == "true" {
+						request, err = base64.StdEncoding.DecodeString(strings.TrimSpace(requestResponse.Request.Body))
+						if err != nil {
+							return nil, fmt.Errorf("cannot decode request: %w", err)
+						}
+					} else {
+						request = []byte(requestResponse.Request.Body)
 					}
 				}
 				if requestResponse.Response != nil {
-					response, err = base64.StdEncoding.DecodeString(requestResponse.Response.Base64)
-					if err != nil {
-						return nil, fmt.Errorf("cannot decode response: %w", err)
+					if requestResponse.Response.Base64 == "true" {
+						response, err = base64.StdEncoding.DecodeString(strings.TrimSpace(requestResponse.Response.Body))
+						if err != nil {
+							return nil, fmt.Errorf("cannot decode response: %w", err)
+						}
+					} else {
+						response = []byte(requestResponse.Response.Body)
 					}
 				}
 
@@ -217,15 +268,23 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				var request, response []byte
 				if collaboratorEvent.RequestResponse != nil {
 					if collaboratorEvent.RequestResponse.Request != nil {
-						request, err = base64.StdEncoding.DecodeString(collaboratorEvent.RequestResponse.Request.Base64)
-						if err != nil {
-							return nil, fmt.Errorf("cannot decode request: %w", err)
+						if collaboratorEvent.RequestResponse.Request.Base64 == "true" {
+							request, err = base64.StdEncoding.DecodeString(strings.TrimSpace(collaboratorEvent.RequestResponse.Request.Body))
+							if err != nil {
+								return nil, fmt.Errorf("cannot decode request: %w", err)
+							}
+						} else {
+							request = []byte(collaboratorEvent.RequestResponse.Request.Body)
 						}
 					}
 					if collaboratorEvent.RequestResponse.Response != nil {
-						response, err = base64.StdEncoding.DecodeString(collaboratorEvent.RequestResponse.Response.Base64)
-						if err != nil {
-							return nil, fmt.Errorf("cannot decode response: %w", err)
+						if collaboratorEvent.RequestResponse.Response.Base64 == "true" {
+							response, err = base64.StdEncoding.DecodeString(strings.TrimSpace(collaboratorEvent.RequestResponse.Response.Body))
+							if err != nil {
+								return nil, fmt.Errorf("cannot decode response: %w", err)
+							}
+						} else {
+							response = []byte(collaboratorEvent.RequestResponse.Response.Body)
 						}
 					}
 				}
@@ -370,10 +429,13 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 					References:  []string{},
 					Description: strings.Trim(item.Synopsis, "\r\n "),
 					Remediation: strings.Trim(item.Solution, "\r\n "),
-					Target:      model.Target{Model: model.Model{ID: targetID}},
-					Assessment:  model.Assessment{Model: model.Model{ID: assessment.ID}},
-					Customer:    model.Customer{Model: model.Model{ID: customer.ID}},
-					User:        model.User{Model: model.Model{ID: userID}},
+					GenericRemediation: model.VulnerabilityGeneric{
+						Enabled: true,
+					},
+					Target:     model.Target{Model: model.Model{ID: targetID}},
+					Assessment: model.Assessment{Model: model.Model{ID: assessment.ID}},
+					Customer:   model.Customer{Model: model.Model{ID: customer.ID}},
+					User:       model.User{Model: model.Model{ID: userID}},
 				}
 
 				if item.CvssVector != "" {
@@ -423,4 +485,95 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 	})
 
 	return err
+}
+
+func htmlToText(s string) string {
+	if s == "" {
+		return ""
+	}
+	doc, err := xhtml.Parse(strings.NewReader(s))
+	if err != nil {
+		return s
+	}
+	var parts []string
+	var current strings.Builder
+
+	flush := func() {
+		if text := strings.TrimSpace(current.String()); text != "" {
+			parts = append(parts, text)
+		}
+		current.Reset()
+	}
+
+	var walk func(*xhtml.Node)
+	walk = func(n *xhtml.Node) {
+		if n.Type == xhtml.TextNode {
+			current.WriteString(whitespaceRun.ReplaceAllString(n.Data, " "))
+			return
+		}
+		if n.Type != xhtml.ElementNode {
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+			return
+		}
+		switch n.Data {
+		case "p", "div", "h1", "h2", "h3", "h4", "h5", "h6":
+			flush()
+			parts = append(parts, "")
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+			flush()
+		case "li":
+			flush()
+			current.WriteString("• ")
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+			flush()
+		case "br":
+			flush()
+		case "ul", "ol":
+			flush()
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+			flush()
+			parts = append(parts, "")
+		default:
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+		}
+	}
+	walk(doc)
+	flush()
+	return multiNewline.ReplaceAllString(strings.TrimSpace(strings.Join(parts, "\n")), "\n\n")
+}
+
+func htmlToRefs(s string) []string {
+	if s == "" {
+		return nil
+	}
+	doc, err := xhtml.Parse(strings.NewReader(s))
+	if err != nil {
+		return nil
+	}
+	var refs []string
+	var walk func(*xhtml.Node)
+	walk = func(n *xhtml.Node) {
+		if n.Type == xhtml.ElementNode && n.Data == "a" {
+			for _, attr := range n.Attr {
+				if attr.Key == "href" && attr.Val != "" {
+					refs = append(refs, attr.Val)
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	return refs
 }
