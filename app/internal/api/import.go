@@ -147,10 +147,11 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				Tag:  "burp",
 			}
 			if ip := net.ParseIP(issue.Host.IP); ip != nil {
+				target.IPv4 = ""
+				target.IPv6 = issue.Host.IP
 				if ip.To4() != nil {
 					target.IPv4 = issue.Host.IP
-				} else {
-					target.IPv6 = issue.Host.IP
+					target.IPv6 = ""
 				}
 			}
 			targetID, _, err := d.db.Target().FirstOrInsert(ctx, target, customer.ID)
@@ -235,23 +236,21 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 			for _, requestResponse := range issue.RequestResponses {
 				var request, response []byte
 				if requestResponse.Request != nil {
+					request = []byte(requestResponse.Request.Body)
 					if requestResponse.Request.Base64 == "true" {
 						request, err = base64.StdEncoding.DecodeString(strings.TrimSpace(requestResponse.Request.Body))
 						if err != nil {
 							return nil, fmt.Errorf("cannot decode request: %w", err)
 						}
-					} else {
-						request = []byte(requestResponse.Request.Body)
 					}
 				}
 				if requestResponse.Response != nil {
+					response = []byte(requestResponse.Response.Body)
 					if requestResponse.Response.Base64 == "true" {
 						response, err = base64.StdEncoding.DecodeString(strings.TrimSpace(requestResponse.Response.Body))
 						if err != nil {
 							return nil, fmt.Errorf("cannot decode response: %w", err)
 						}
-					} else {
-						response = []byte(requestResponse.Response.Body)
 					}
 				}
 
@@ -268,23 +267,21 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				var request, response []byte
 				if collaboratorEvent.RequestResponse != nil {
 					if collaboratorEvent.RequestResponse.Request != nil {
+						request = []byte(collaboratorEvent.RequestResponse.Request.Body)
 						if collaboratorEvent.RequestResponse.Request.Base64 == "true" {
 							request, err = base64.StdEncoding.DecodeString(strings.TrimSpace(collaboratorEvent.RequestResponse.Request.Body))
 							if err != nil {
 								return nil, fmt.Errorf("cannot decode request: %w", err)
 							}
-						} else {
-							request = []byte(collaboratorEvent.RequestResponse.Request.Body)
 						}
 					}
 					if collaboratorEvent.RequestResponse.Response != nil {
+						response = []byte(collaboratorEvent.RequestResponse.Response.Body)
 						if collaboratorEvent.RequestResponse.Response.Base64 == "true" {
 							response, err = base64.StdEncoding.DecodeString(strings.TrimSpace(collaboratorEvent.RequestResponse.Response.Body))
 							if err != nil {
 								return nil, fmt.Errorf("cannot decode response: %w", err)
 							}
-						} else {
-							response = []byte(collaboratorEvent.RequestResponse.Response.Body)
 						}
 					}
 				}
