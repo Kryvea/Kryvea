@@ -5,7 +5,7 @@ import { deleteData, getData, postData } from "../api/api";
 import Grid from "../components/Composition/Grid";
 import Modal from "../components/Composition/Modal";
 import PageHeader from "../components/Composition/PageHeader";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import Input from "../components/Form/Input";
@@ -14,11 +14,14 @@ import { SelectOption } from "../components/Form/SelectWrapper.types";
 import UploadFile from "../components/Form/UploadFile";
 import { Template } from "../types/common.types";
 import { languageMapping } from "../utils/constants";
-import { getPageTitle, sortBy } from "../utils/helpers";
+import { getPageTitle } from "../utils/helpers";
+import { useTableUrlState } from "../utils/useTableUrlState";
 
 export default function Templates() {
   const [uploadedTemplates, setUploadedTemplates] = useState<Template[]>([]);
   const [loadingAssessments, setLoadingAssessments] = useState(false);
+
+  const t = useTableUrlState({ defaultLimit: 10, defaultSort: { key: "Name", order: "asc" } });
   const [templateToDelete, setTemplateToDelete] = useState<Template | null>(null);
   const [isModalUploadActive, setIsModalUploadActive] = useState(false);
   const [isModalTrashActive, setIsModalTrashActive] = useState(false);
@@ -113,6 +116,42 @@ export default function Templates() {
     });
   };
 
+  const templateColumns: Column<Template>[] = [
+    { header: "Name", render: template => template.name },
+    { header: "Filename", render: template => template.filename },
+    { header: "Customer", render: template => template.customer?.name },
+    {
+      header: "Language",
+      render: template => languageMapping[template.language] || template.language,
+    },
+    { header: "Template Type", render: template => template.template_type },
+    { header: "Template Identifier", render: template => template.identifier },
+    {
+      kind: "actions",
+      render: template => (
+        <Buttons noWrap>
+          <Button
+            variant="tertiary"
+            icon={mdiDownload}
+            onClick={() => downloadTemplate(template)}
+            small
+            title="Download template"
+          />
+          <Button
+            icon={mdiTrashCan}
+            onClick={() => {
+              setTemplateToDelete(template);
+              setIsModalTrashActive(true);
+            }}
+            variant="danger"
+            small
+            title="Delete template"
+          />
+        </Buttons>
+      ),
+    },
+  ];
+
   return (
     <div>
       {/* Upload Modal */}
@@ -175,36 +214,12 @@ export default function Templates() {
 
       <Table
         loading={loadingAssessments}
-        data={uploadedTemplates.sort(sortBy("created_at")).map(template => ({
-          Name: template.name,
-          Filename: template.filename,
-          Customer: template.customer?.name,
-          Language: languageMapping[template.language] || template.language,
-          "Template Type": template.template_type,
-          "Template Identifier": template.identifier,
-          buttons: (
-            <Buttons noWrap>
-              <Button
-                variant="tertiary"
-                icon={mdiDownload}
-                onClick={() => downloadTemplate(template)}
-                small
-                title="Download template"
-              />
-              <Button
-                icon={mdiTrashCan}
-                onClick={() => {
-                  setTemplateToDelete(template);
-                  setIsModalTrashActive(true);
-                }}
-                variant="danger"
-                small
-                title="Delete template"
-              />
-            </Buttons>
-          ),
-        }))}
-        perPageCustom={10}
+        columns={templateColumns}
+        data={uploadedTemplates}
+        search={t.search}
+        sort={t.sort}
+        onSortChange={t.onSortChange}
+        pagination={t.pagination}
       />
     </div>
   );

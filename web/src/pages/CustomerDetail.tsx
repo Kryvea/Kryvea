@@ -11,7 +11,7 @@ import Divider from "../components/Composition/Divider";
 import Flex from "../components/Composition/Flex";
 import Grid from "../components/Composition/Grid";
 import PageHeader from "../components/Composition/PageHeader";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import Input from "../components/Form/Input";
@@ -20,7 +20,8 @@ import { SelectOption } from "../components/Form/SelectWrapper.types";
 import UploadFile from "../components/Form/UploadFile";
 import { Customer, Template, uuidZero } from "../types/common.types";
 import { languageMapping, USER_ROLE_ADMIN } from "../utils/constants";
-import { getPageTitle, sortBy } from "../utils/helpers";
+import { getPageTitle } from "../utils/helpers";
+import { useTableUrlState } from "../utils/useTableUrlState";
 
 export default function CustomerDetail() {
   const {
@@ -32,6 +33,8 @@ export default function CustomerDetail() {
   const [fileObj, setFileObj] = useState<File | null>(null);
   const [customerTemplates, setCustomerTemplates] = useState<Template[]>([]);
   const [loadingCustomerTemplates, setLoadingCustomerTemplates] = useState(true);
+
+  const t = useTableUrlState({ defaultLimit: 5, defaultSort: { key: "Name", order: "asc" } });
   const [selectedTemplateLanguage, setSelectedTemplateLanguage] = useState<SelectOption | null>(null);
 
   const isAdmin = getKryveaShadow() === USER_ROLE_ADMIN;
@@ -195,6 +198,36 @@ export default function CustomerDetail() {
     );
   };
 
+  const customerTemplateColumns: Column<Template>[] = [
+    { header: "Name", render: template => template.name },
+    {
+      header: "Language",
+      render: template => languageMapping[template.language] || template.language,
+    },
+    { header: "Filename", render: template => template.filename },
+    { header: "Template Type", render: template => template.template_type },
+    { header: "Template Identifier", render: template => template.identifier },
+    {
+      kind: "actions",
+      render: template => (
+        <Buttons noWrap>
+          <Button
+            icon={mdiDownload}
+            title="Download template"
+            onClick={() => downloadTemplate(template)}
+            variant="secondary"
+          />
+          <Button
+            icon={mdiTrashCan}
+            title="Delete template"
+            onClick={() => deleteTemplate(template.id)}
+            variant="danger"
+          />
+        </Buttons>
+      ),
+    },
+  ];
+
   const CustomerLogo = memo(
     ({ logoId, isAdmin, formCustomer }: any) => {
       return (
@@ -336,30 +369,12 @@ export default function CustomerDetail() {
             <Divider />
             <Table
               loading={loadingCustomerTemplates}
-              data={customerTemplates.sort(sortBy("name", { caseInsensitive: true })).map(template => ({
-                Name: template.name,
-                Language: languageMapping[template.language] || template.language,
-                Filename: template.filename,
-                "Template Type": template.template_type,
-                "Template Identifier": template.identifier,
-                buttons: (
-                  <Buttons noWrap>
-                    <Button
-                      icon={mdiDownload}
-                      title="Download template"
-                      onClick={() => downloadTemplate(template)}
-                      variant="secondary"
-                    />
-                    <Button
-                      icon={mdiTrashCan}
-                      title="Delete template"
-                      onClick={() => deleteTemplate(template.id)}
-                      variant="danger"
-                    />
-                  </Buttons>
-                ),
-              }))}
-              perPageCustom={5}
+              columns={customerTemplateColumns}
+              data={customerTemplates}
+              search={t.search}
+              sort={t.sort}
+              onSortChange={t.onSortChange}
+              pagination={t.pagination}
             />
           </Grid>
         </Card>

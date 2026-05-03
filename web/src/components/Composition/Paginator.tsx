@@ -1,9 +1,10 @@
-import { memo, useCallback } from "react";
-import { v4 } from "uuid";
+import { useId } from "react";
 import Button from "../Form/Button";
 import Buttons from "../Form/Buttons";
 import Input from "../Form/Input";
 import Flex from "./Flex";
+
+const EllipsisButton = () => <Button variant="secondary" small text="..." disabled onClick={() => {}} />;
 
 export default function Paginator({
   currentPage,
@@ -14,13 +15,10 @@ export default function Paginator({
   setCurrentPage,
   setPerPage,
 }) {
-  const getPaginatorKey = useCallback((page: number) => `paginator-${page}-${v4()}`, []);
-
+  const perPageInputId = useId();
   const isInTheMiddle = currentPage > 2 && currentPage < pagesList.length - 1;
 
   const isLessThan10 = pagesList.length < 10;
-
-  const EllipsisButton = memo(() => <Button variant="secondary" small text="..." disabled onClick={() => {}} />);
 
   const isOverlapping = page => page < 3 || page > pagesList.length - 2;
 
@@ -40,7 +38,7 @@ export default function Paginator({
               text={page}
               disabled={page === currentPage}
               onClick={() => setCurrentPage(page)}
-              key={getPaginatorKey(page)}
+              key={page}
             />
           ))
         ) : (
@@ -53,7 +51,7 @@ export default function Paginator({
                 text={page}
                 disabled={page === currentPage}
                 onClick={() => setCurrentPage(page)}
-                key={getPaginatorKey(page)}
+                key={page}
               />
             ))}
 
@@ -71,7 +69,7 @@ export default function Paginator({
                         text={page}
                         disabled={page === currentPage}
                         onClick={() => setCurrentPage(page)}
-                        key={getPaginatorKey(page)}
+                        key={page}
                       />
                     )
                   )}
@@ -81,7 +79,7 @@ export default function Paginator({
               <EllipsisButton />
             )}
 
-            {pagesList.splice(isInTheMiddle ? -2 : -3).map(page => (
+            {pagesList.slice(isInTheMiddle ? -2 : -3).map(page => (
               <Button
                 small
                 className="sticky right-0 aspect-square !max-h-9 !min-w-9 justify-center !p-0 text-center"
@@ -89,7 +87,7 @@ export default function Paginator({
                 text={page}
                 disabled={page === currentPage}
                 onClick={() => setCurrentPage(page)}
-                key={getPaginatorKey(page)}
+                key={page}
               />
             ))}
           </>
@@ -103,7 +101,7 @@ export default function Paginator({
         <Input
           type="number"
           className="mr-2 max-h-8 w-[50px] rounded-md text-center"
-          id={`paginator-per-page-input-${v4()}`}
+          id={perPageInputId}
           value={perPage}
           min={1}
           onChange={setPerPage}

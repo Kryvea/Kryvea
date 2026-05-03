@@ -8,16 +8,19 @@ import { GlobalContext } from "../App";
 import Flex from "../components/Composition/Flex";
 import Modal from "../components/Composition/Modal";
 import PageHeader from "../components/Composition/PageHeader";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import { Customer } from "../types/common.types";
 import { languageMapping, USER_ROLE_ADMIN } from "../utils/constants";
-import { getPageTitle, sortBy } from "../utils/helpers";
+import { getPageTitle } from "../utils/helpers";
+import { useTableUrlState } from "../utils/useTableUrlState";
 
 export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
+
+  const t = useTableUrlState({ defaultLimit: 100, defaultSort: { key: "Name", order: "asc" } });
   const [isModalTrashActive, setIsModalTrashActive] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
@@ -61,6 +64,43 @@ export default function Customers() {
     setSelectedCustomer(null);
   };
 
+  const customerColumns: Column<Customer>[] = [
+    {
+      header: "Name",
+      render: customer => (
+        <a
+          className="cursor-pointer"
+          onClick={() => {
+            setCtxCustomer(customer);
+            setCtxSelectedSidebarItemLabel("Assessments");
+            navigate(`${customer.id}/assessments`);
+          }}
+        >
+          {customer.name}
+        </a>
+      ),
+    },
+    {
+      header: "Default language",
+      render: customer => languageMapping[customer.language] || customer.language,
+    },
+    {
+      kind: "actions",
+      render: customer => (
+        <Buttons noWrap>
+          <Button
+            title={!isAdmin ? "Only administrators can perform this action" : "Delete customer"}
+            disabled={!isAdmin}
+            small
+            variant="danger"
+            onClick={() => openDeleteModal(customer)}
+            icon={mdiTrashCan}
+          />
+        </Buttons>
+      ),
+    },
+  ];
+
   return (
     <div>
       {/* Delete Confirmation Modal */}
@@ -88,34 +128,12 @@ export default function Customers() {
 
       <Table
         loading={loadingCustomers}
-        data={customers.sort(sortBy("name", { caseInsensitive: true })).map(customer => ({
-          Name: (
-            <a
-              className="cursor-pointer"
-              onClick={() => {
-                setCtxCustomer(customer);
-                setCtxSelectedSidebarItemLabel("Assessments");
-                navigate(`${customer.id}/assessments`);
-              }}
-            >
-              {customer.name}
-            </a>
-          ),
-          "Default language": languageMapping[customer.language] || customer.language,
-          buttons: (
-            <Buttons noWrap>
-              <Button
-                title={!isAdmin ? "Only administrators can perform this action" : "Delete customer"}
-                disabled={!isAdmin}
-                small
-                variant="danger"
-                onClick={() => openDeleteModal(customer)}
-                icon={mdiTrashCan}
-              />
-            </Buttons>
-          ),
-        }))}
-        perPageCustom={100}
+        columns={customerColumns}
+        data={customers}
+        search={t.search}
+        sort={t.sort}
+        onSortChange={t.onSortChange}
+        pagination={t.pagination}
       />
     </div>
   );

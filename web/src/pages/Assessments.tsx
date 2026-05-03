@@ -8,7 +8,7 @@ import Flex from "../components/Composition/Flex";
 import Grid from "../components/Composition/Grid";
 import Modal from "../components/Composition/Modal";
 import PageHeader from "../components/Composition/PageHeader";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import Checkbox from "../components/Form/Checkbox";
@@ -18,7 +18,8 @@ import { SelectOption } from "../components/Form/SelectWrapper.types";
 import ExportReportModal from "../components/Modals/ExportReportModal";
 import { Assessment, Template } from "../types/common.types";
 import { formatDate } from "../utils/dates";
-import { getPageTitle, sortBy } from "../utils/helpers";
+import { getPageTitle } from "../utils/helpers";
+import { useTableUrlState } from "../utils/useTableUrlState";
 
 export default function Assessments() {
   const navigate = useNavigate();
@@ -43,6 +44,8 @@ export default function Assessments() {
   ]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loadingAssessments, setLoadingAssessments] = useState(true);
+
+  const t = useTableUrlState({ defaultLimit: 50, defaultSort: { key: "End", order: "desc" } });
 
   const [checkIncludePoc, setCheckIncludePoc] = useState(false);
 
@@ -115,6 +118,100 @@ export default function Assessments() {
     setSelectedAssessmentId(assessmentId);
     setIsModalDownloadActive(true);
   };
+
+  const assessmentColumns: Column<Assessment>[] = [
+    {
+      header: "Title",
+      maxWidth: "24rem",
+      render: assessment => (
+        <Link
+          to={`/customers/${customerId}/assessments/${assessment.id}/vulnerabilities`}
+          onClick={() => setCtxAssessment(assessment)}
+          title={assessment.name}
+        >
+          {assessment.name}
+        </Link>
+      ),
+    },
+    { header: "Type", render: assessment => assessment.type.short },
+    {
+      header: "CVSS Versions",
+      render: assessment =>
+        [
+          assessment.cvss_versions["2.0"] ? "2.0" : null,
+          assessment.cvss_versions["3.1"] ? "3.1" : null,
+          assessment.cvss_versions["4.0"] ? "4.0" : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+    },
+    { header: "Vuln count", render: assessment => assessment.vulnerability_count },
+    {
+      header: "Start",
+      sortValue: assessment => new Date(assessment.start_date_time),
+      render: assessment => formatDate(assessment.start_date_time),
+    },
+    {
+      header: "End",
+      sortValue: assessment => new Date(assessment.end_date_time),
+      render: assessment => formatDate(assessment.end_date_time),
+    },
+    { header: "Language", render: assessment => assessment.language?.toUpperCase() },
+    {
+      header: "Status",
+      render: assessment => (
+        <SelectWrapper
+          small
+          widthFixed
+          options={statusSelectOptions}
+          value={statusSelectOptions.find(opt => opt.value === assessment.status)}
+          onChange={selectedOption => handleStatusChange(assessment.id, selectedOption)}
+        />
+      ),
+    },
+    {
+      kind: "actions",
+      render: assessment => (
+        <Buttons noWrap>
+          <Button
+            variant={assessment.is_owned ? "warning" : "tertiary"}
+            icon={mdiStar}
+            onClick={handleOwnedToggle(assessment)}
+            small
+            title="Take ownership"
+          />
+          <Button
+            variant="tertiary"
+            icon={mdiFileEdit}
+            onClick={() => navigate(`/customers/${customerId}/assessments/${assessment.id}`)}
+            small
+            title="Edit assessment"
+          />
+          <Button
+            variant="tertiary"
+            icon={mdiContentDuplicate}
+            onClick={() => openCloneModal(assessment)}
+            small
+            title="Clone assessment"
+          />
+          <Button
+            variant="tertiary"
+            icon={mdiDownload}
+            onClick={() => openExportModal(assessment.id)}
+            small
+            title="Download assessment"
+          />
+          <Button
+            variant="danger"
+            icon={mdiTrashCan}
+            onClick={() => openDeleteModal(assessment)}
+            small
+            title="Delete assessment"
+          />
+        </Buttons>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -190,79 +287,12 @@ export default function Assessments() {
 
       <Table
         loading={loadingAssessments}
-        data={assessments?.sort(sortBy("end_date_time", { reverse: true })).map(assessment => ({
-          Title: (
-            <Link
-              to={`/customers/${customerId}/assessments/${assessment.id}/vulnerabilities`}
-              onClick={() => setCtxAssessment(assessment)}
-              title={assessment.name}
-            >
-              {assessment.name}
-            </Link>
-          ),
-          Type: assessment.type.short,
-          "CVSS Versions": [
-            assessment.cvss_versions["2.0"] ? "2.0" : null,
-            assessment.cvss_versions["3.1"] ? "3.1" : null,
-            assessment.cvss_versions["4.0"] ? "4.0" : null,
-          ]
-            .filter(Boolean)
-            .join(" | "),
-          "Vuln count": assessment.vulnerability_count,
-          Start: formatDate(assessment.start_date_time),
-          End: formatDate(assessment.end_date_time),
-          Language: assessment.language?.toUpperCase(),
-          Status: (
-            <SelectWrapper
-              small
-              widthFixed
-              options={statusSelectOptions}
-              value={statusSelectOptions.find(opt => opt.value === assessment.status)}
-              onChange={selectedOption => handleStatusChange(assessment.id, selectedOption)}
-            />
-          ),
-          buttons: (
-            <Buttons noWrap>
-              <Button
-                variant={assessment.is_owned ? "warning" : "tertiary"}
-                icon={mdiStar}
-                onClick={handleOwnedToggle(assessment)}
-                small
-                title="Take ownership"
-              />
-              <Button
-                variant="tertiary"
-                icon={mdiFileEdit}
-                onClick={() => navigate(`/customers/${customerId}/assessments/${assessment.id}`)}
-                small
-                title="Edit assessment"
-              />
-              <Button
-                variant="tertiary"
-                icon={mdiContentDuplicate}
-                onClick={() => openCloneModal(assessment)}
-                small
-                title="Clone assessment"
-              />
-              <Button
-                variant="tertiary"
-                icon={mdiDownload}
-                onClick={() => openExportModal(assessment.id)}
-                small
-                title="Download assessment"
-              />
-              <Button
-                variant="danger"
-                icon={mdiTrashCan}
-                onClick={() => openDeleteModal(assessment)}
-                small
-                title="Delete assessment"
-              />
-            </Buttons>
-          ),
-        }))}
-        perPageCustom={50}
-        maxWidthColumns={{ Title: "24rem" }}
+        columns={assessmentColumns}
+        data={assessments ?? []}
+        search={t.search}
+        sort={t.sort}
+        onSortChange={t.onSortChange}
+        pagination={t.pagination}
       />
     </div>
   );

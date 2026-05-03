@@ -6,7 +6,7 @@ import { deleteData, getData, postData } from "../api/api";
 import Grid from "../components/Composition/Grid";
 import Modal from "../components/Composition/Modal";
 import PageHeader from "../components/Composition/PageHeader";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import Checkbox from "../components/Form/Checkbox";
@@ -14,6 +14,7 @@ import UploadFile from "../components/Form/UploadFile";
 import { Category } from "../types/common.types";
 import { formatDate } from "../utils/dates";
 import { getPageTitle } from "../utils/helpers";
+import { useTableUrlState } from "../utils/useTableUrlState";
 import { sourceCategoryOptions } from "./CategoryUpsert";
 
 const sourceCategoryMap = Object.fromEntries(sourceCategoryOptions.map(({ value, label }) => [value, label]));
@@ -23,6 +24,8 @@ export default function Categories() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+
+  const t = useTableUrlState({ defaultLimit: 50, defaultSort: { key: "Identifier", order: "asc" } });
   const [isModalManageActive, setIsModalManageActive] = useState(false);
   const [isModalTrashActive, setIsModalTrashActive] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
@@ -99,6 +102,54 @@ export default function Categories() {
     confirmDeleteCategory();
   };
 
+  const categoryColumns: Column<Category>[] = [
+    {
+      header: "Identifier",
+      sortValue: category => category.identifier + category.name + category.subcategory,
+      render: category => category.identifier,
+    },
+    { header: "Name", maxWidth: "20rem", render: category => category.name },
+    { header: "Subcategory", render: category => category.subcategory },
+    { header: "Source", render: category => sourceCategoryMap[category.source] },
+    {
+      header: "Languages",
+      render: category =>
+        Object.values(category.languages_order || {})
+          .sort()
+          .join(" | ")
+          .toUpperCase(),
+    },
+    {
+      header: "Last update",
+      sortValue: category => new Date(category.updated_at),
+      render: category => formatDate(category.updated_at),
+    },
+    {
+      kind: "actions",
+      render: category => (
+        <Buttons noWrap>
+          <Button
+            variant="tertiary"
+            icon={mdiPencil}
+            small
+            title="Edit category"
+            onClick={() => navigate(`${category.id}`)}
+          />
+          <Button
+            variant="danger"
+            icon={mdiTrashCan}
+            title="Delete category"
+            small
+            onClick={() => {
+              setCategoryToDelete(category);
+              setIsModalTrashActive(true);
+            }}
+          />
+        </Buttons>
+      ),
+    },
+  ];
+
   return (
     <div>
       {/* Delete single category modal */}
@@ -162,42 +213,12 @@ export default function Categories() {
       <div>
         <Table
           loading={loadingCategories}
-          data={categories
-            .sort((a, b) => (a.identifier + a.name + a.subcategory < b.identifier + b.name + b.subcategory ? -1 : 1))
-            .map(category => ({
-              Identifier: category.identifier,
-              Name: category.name,
-              Subcategory: category.subcategory,
-              Source: sourceCategoryMap[category.source],
-              Languages: Object.values(category.languages_order || {})
-                .sort()
-                .join(" | ")
-                .toUpperCase(),
-              "Last update": formatDate(category.updated_at),
-              buttons: (
-                <Buttons noWrap key={category.id}>
-                  <Button
-                    variant="tertiary"
-                    icon={mdiPencil}
-                    small
-                    title="Edit category"
-                    onClick={() => navigate(`${category.id}`)}
-                  />
-                  <Button
-                    variant="danger"
-                    icon={mdiTrashCan}
-                    title="Delete category"
-                    small
-                    onClick={() => {
-                      setCategoryToDelete(category);
-                      setIsModalTrashActive(true);
-                    }}
-                  />
-                </Buttons>
-              ),
-            }))}
-          perPageCustom={50}
-          maxWidthColumns={{ Name: "20rem" }}
+          columns={categoryColumns}
+          data={categories}
+          search={t.search}
+          sort={t.sort}
+          onSortChange={t.onSortChange}
+          pagination={t.pagination}
         />
       </div>
     </div>

@@ -6,17 +6,20 @@ import { deleteData, getData, patchData } from "../api/api";
 import Grid from "../components/Composition/Grid";
 import Modal from "../components/Composition/Modal";
 import PageHeader from "../components/Composition/PageHeader";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import Input from "../components/Form/Input";
 import AddTargetModal from "../components/Modals/AddTargetModal";
 import { Target } from "../types/common.types";
-import { getPageTitle, sortBy } from "../utils/helpers";
+import { getPageTitle } from "../utils/helpers";
+import { useTableUrlState } from "../utils/useTableUrlState";
 
 export default function Targets() {
   const [targets, setTargets] = useState<Target[]>([]);
   const [loadingTargets, setLoadingTargets] = useState(true);
+
+  const t = useTableUrlState({ defaultLimit: 10, defaultSort: { key: "FQDN | Target name", order: "asc" } });
 
   const [isModalAddActive, setIsModalAddActive] = useState(false);
 
@@ -87,6 +90,28 @@ export default function Targets() {
       fetchTargets();
     });
   };
+
+  const targetColumns: Column<Target>[] = [
+    { header: "FQDN | Target name", render: target => target.fqdn },
+    { header: "IPv4", render: target => target.ipv4 },
+    { header: "IPv6", render: target => target.ipv6 },
+    { header: "Tag", render: target => target.tag },
+    {
+      kind: "actions",
+      render: target => (
+        <Buttons noWrap>
+          <Button variant="tertiary" icon={mdiPencil} title="Edit target" onClick={() => openEditModal(target)} small />
+          <Button
+            variant="danger"
+            icon={mdiTrashCan}
+            title="Delete target"
+            onClick={() => openDeleteModal(target)}
+            small
+          />
+        </Buttons>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -162,31 +187,12 @@ export default function Targets() {
 
       <Table
         loading={loadingTargets}
-        data={targets.sort(sortBy("fqdn", { caseInsensitive: true })).map(target => ({
-          "FQDN | Target name": target.fqdn,
-          IPv4: target.ipv4,
-          IPv6: target.ipv6,
-          Tag: target.tag,
-          buttons: (
-            <Buttons noWrap>
-              <Button
-                variant="tertiary"
-                icon={mdiPencil}
-                title="Edit target"
-                onClick={() => openEditModal(target)}
-                small
-              />
-              <Button
-                variant="danger"
-                icon={mdiTrashCan}
-                title="Delete target"
-                onClick={() => openDeleteModal(target)}
-                small
-              />
-            </Buttons>
-          ),
-        }))}
-        perPageCustom={10}
+        columns={targetColumns}
+        data={targets}
+        search={t.search}
+        sort={t.sort}
+        onSortChange={t.onSortChange}
+        pagination={t.pagination}
       />
     </div>
   );

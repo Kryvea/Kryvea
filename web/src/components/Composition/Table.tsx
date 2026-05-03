@@ -1,288 +1,320 @@
 import { mdiChevronDown, mdiChevronUp, mdiClose } from "@mdi/js";
-import { isValidElement, useCallback, useEffect, useMemo, useState } from "react";
-import { v4 } from "uuid";
+import { ReactNode, isValidElement, useMemo, useState } from "react";
 import Card from "./Card";
 import Flex from "./Flex";
 import Icon from "./Icon";
 import Paginator from "./Paginator";
 import Shimmer from "./Shimmer";
 
-interface BaseTableProps {
-  data: any[];
-  defaultFilterText?: string;
-  perPageCustom?;
-  wMin?: true;
-  maxWidthColumns?: Record<string, string>;
+type SortState = { key: string; order: "asc" | "desc" };
+
+type DataColumn<Row> = {
+  kind?: "data";
+  header: string;
+  render: (row: Row) => ReactNode;
+  sortKey?: string;
+  sortable?: boolean;
+  sortValue?: (row: Row) => string | number | Date;
+  maxWidth?: string;
+};
+
+type ActionsColumn<Row> = {
+  kind: "actions";
+  render: (row: Row) => ReactNode;
+};
+
+export type Column<Row> = DataColumn<Row> | ActionsColumn<Row>;
+
+interface SearchProps {
+  value: string;
+  onChange: (q: string) => void;
+}
+
+interface PaginationProps {
+  page: number;
+  perPage: number;
+  totalPages?: number;
+  totalRows?: number;
+  onPageChange: (page: number) => void;
+  onPerPageChange: (perPage: number) => void;
+}
+
+type RowWithId = { id: string | number };
+
+type TableProps<Row extends RowWithId> = {
+  columns: Column<Row>[];
+  data: Row[];
   loading?: boolean;
-}
-
-interface WithoutBackendSearchProps {
-  backendCurrentPage?: undefined;
-  backendTotalPages?: undefined;
-  backendTotalRows?: undefined;
-  backendSearch?: undefined;
-  onBackendSearch?: undefined;
-  onBackendChangePage?: undefined;
-  onBackendChangePerPage?: undefined;
-}
-
-interface WithBackendSearchProps {
-  backendCurrentPage: number;
-  backendTotalPages: number;
-  backendTotalRows: number;
-  backendSearch: string;
-  onBackendChangePage: (page: number) => void;
-  onBackendChangePerPage: (perPage: number) => void;
-  onBackendSearch: (query: string) => void;
-}
-
-type TableProps = (BaseTableProps & WithoutBackendSearchProps) | (BaseTableProps & WithBackendSearchProps);
+  rowKey?: (row: Row, index: number) => string | number;
+  perPage?: number;
+  search?: SearchProps;
+  pagination?: PaginationProps;
+  sort?: SortState;
+  onSortChange?: (next: SortState | undefined) => void;
+  defaultSort?: SortState;
+};
 
 const PAGE_FLOOR = 1;
-const BUTTONS_KEY = "buttons";
 
-export default function Table({
+function extractText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") {
+    return "";
+  }
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(extractText).join(" ");
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return extractText(node.props.children);
+  }
+  return "";
+}
+
+function cycleSort(prev: SortState | undefined, key: string): SortState | undefined {
+  if (!prev || prev.key !== key) {
+    return { key, order: "asc" };
+  }
+  if (prev.order === "asc") {
+    return { key, order: "desc" };
+  }
+  return undefined;
+}
+
+export default function Table<Row extends RowWithId>({
+  columns,
   data,
-  perPageCustom = 5,
-  wMin,
-  maxWidthColumns = {},
   loading,
-  backendCurrentPage,
-  backendTotalPages,
-  backendTotalRows,
-  backendSearch,
-  onBackendSearch,
-  onBackendChangePage,
-  onBackendChangePerPage,
-}: TableProps) {
-  const [perPage, setPerPage] = useState(perPageCustom);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [keySort, setKeySort] = useState<{ header: string; order: 1 | 2 }>();
+  perPage: perPageInitial = 5,
+  search,
+  pagination,
+  sort,
+  onSortChange,
+  defaultSort,
+  rowKey,
+}: TableProps<Row>) {
   const [filterText, setFilterText] = useState("");
-  const [filteredData, setFilteredData] = useState(data ?? []);
+  const [clientPage, setClientPage] = useState(PAGE_FLOOR);
+  const [clientPerPage, setClientPerPage] = useState(perPageInitial);
+  const [clientSort, setClientSort] = useState<SortState | undefined>(defaultSort);
 
-  const getTableElementKey = useCallback((element: string) => `table-${element}-${v4()}`, []);
+  const isServerMode = pagination?.totalRows !== undefined;
+  const effectiveSearch = search?.value ?? filterText;
+  const effectivePage = pagination?.page ?? clientPage;
+  const effectivePerPage = pagination?.perPage ?? clientPerPage;
+  const effectiveSort = sort ?? clientSort;
 
-  useEffect(() => {
-    setFilteredData(
-      (data ?? []).filter(obj => {
-        return Object.entries(obj)
-          .filter(([key]) => key !== BUTTONS_KEY)
-          .some(([_, value]) => {
-            if (isValidElement(value)) {
-              value = (value as any).props.children;
-            }
-            return value?.toString().toLowerCase().includes(filterText.toLowerCase());
-          });
-      })
+  const sortKeyOf = (column: DataColumn<Row>) =>
+    isServerMode ? column.sortKey : (column.sortKey ?? column.header);
+
+  const isSortable = (column: DataColumn<Row>) =>
+    isServerMode ? !!column.sortKey : column.sortable !== false;
+
+  const sortColumn = useMemo(() => {
+    if (!effectiveSort) {
+      return undefined;
+    }
+    return columns.find(column => {
+      if (column.kind === "actions") {
+        return false;
+      }
+      return sortKeyOf(column) === effectiveSort.key;
+    }) as DataColumn<Row> | undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns, effectiveSort, isServerMode]);
+
+  const filteredData = useMemo(() => {
+    if (isServerMode) {
+      return data;
+    }
+    const query = effectiveSearch.toLowerCase();
+    if (!query) {
+      return data;
+    }
+    return data.filter(row =>
+      columns.some(column => column.kind !== "actions" && extractText(column.render(row)).toLowerCase().includes(query))
     );
-  }, [filterText, data]);
+  }, [data, columns, effectiveSearch, isServerMode]);
 
-  const sortAscend = (a, b) => {
-    a = a[keySort.header];
-    b = b[keySort.header];
-    if (isValidElement(a)) {
-      a = (a as any).props.children;
-      b = (b as any).props.children;
+  const sortedData = useMemo(() => {
+    if (isServerMode) {
+      return filteredData;
     }
-    if (a > b) return 1;
-    if (a < b) return -1;
-    return 0;
-  };
-  const sortDescend = (a, b) => {
-    a = a[keySort.header];
-    b = b[keySort.header];
-    if (isValidElement(a)) {
-      a = (a as any).props.children;
-      b = (b as any).props.children;
+    if (!effectiveSort || !sortColumn) {
+      return filteredData;
     }
-    if (a < b) return 1;
-    if (a > b) return -1;
-    return 0;
-  };
+    const direction = effectiveSort.order === "asc" ? 1 : -1;
+    const getValue = sortColumn.sortValue ?? ((row: Row) => extractText(sortColumn.render(row)));
+    return [...filteredData].sort((a, b) => {
+      const valueA = getValue(a);
+      const valueB = getValue(b);
+      if (typeof valueA === "string" && typeof valueB === "string") {
+        return valueA.localeCompare(valueB, undefined, { sensitivity: "base", numeric: true }) * direction;
+      }
+      if (valueA === valueB) return 0;
+      return valueA > valueB ? direction : -direction;
+    });
+  }, [filteredData, effectiveSort, sortColumn, isServerMode]);
 
-  const itemPaginated = (arr: any[]) => {
-    // if (backendTotalPages) {
-    // // this would disable table sort clientside
-    // // for when backend implements sorting
-    //   return arr;
-    // }
-
-    let result = [...arr]; // always copy
-
-    switch (keySort?.order) {
-      case 1:
-        result.sort(sortAscend);
-        break;
-      case 2:
-        result.sort(sortDescend);
-        break;
+  const visibleData = useMemo(() => {
+    if (isServerMode) {
+      return sortedData;
     }
-
-    if (backendTotalPages) {
-      return result;
-    }
-    return result.slice(perPage * (currentPage - PAGE_FLOOR), perPage * currentPage);
-  };
+    return sortedData.slice(effectivePerPage * (effectivePage - PAGE_FLOOR), effectivePerPage * effectivePage);
+  }, [sortedData, effectivePage, effectivePerPage, isServerMode]);
 
   const numPages = useMemo(() => {
-    if (backendTotalPages) {
-      return backendTotalPages;
+    if (isServerMode) {
+      return pagination!.totalPages ?? 0;
     }
+    const totalPages = Math.ceil(filteredData.length / effectivePerPage);
+    return isNaN(totalPages) ? 0 : totalPages;
+  }, [isServerMode, pagination, filteredData.length, effectivePerPage]);
 
-    let num = Math.ceil(filteredData.length / perPage);
-    if (isNaN(num)) {
-      return 0;
+  const pagesList = useMemo(() => Array.from({ length: numPages }, (_, i) => i + PAGE_FLOOR), [numPages]);
+
+  const handleSearchChange = (v: string) => {
+    if (search) {
+      search.onChange(v);
+      return;
     }
-    return num;
-  }, [filteredData.length, perPage, backendTotalRows, backendTotalPages]);
+    setClientPage(PAGE_FLOOR);
+    setFilterText(v);
+  };
 
-  const pagesList = [];
-  for (let i = PAGE_FLOOR; i <= numPages; i++) {
-    pagesList.push(i);
-  }
+  const handleHeaderClick = (column: DataColumn<Row>) => {
+    const key = sortKeyOf(column);
+    if (!key) return;
+    const next = cycleSort(effectiveSort, key);
+    if (onSortChange) {
+      onSortChange(next);
+      return;
+    }
+    setClientSort(next);
+  };
 
-  const onHeaderClick = header => () => {
-    setKeySort(prev => {
-      if (prev === undefined || prev.header !== header) {
-        return { header, order: 1 };
-      }
-      if (prev.header === header && prev.order === 1) {
-        return { header, order: 2 };
-      }
-      return undefined;
-    });
+  const indicatorKey = (column: DataColumn<Row>) => sortKeyOf(column);
+
+  const setCurrentPage = (p: number) => {
+    if (pagination) {
+      pagination.onPageChange(p);
+      return;
+    }
+    setClientPage(p);
+  };
+
+  const setPerPage = (n: number) => {
+    if (pagination) {
+      pagination.onPerPageChange(n);
+      pagination.onPageChange(PAGE_FLOOR);
+      return;
+    }
+    setClientPage(PAGE_FLOOR);
+    setClientPerPage(n);
   };
 
   return (
-    <Card className={`!relative !gap-0 !p-0 ${wMin ? "w-min" : ""}`}>
+    <Card className="!relative !gap-0 !p-0">
       <Flex className="px-2 pt-1" items="center">
         <input
           className="w-full rounded-t-2xl bg-transparent focus:border-transparent"
           placeholder="Search"
-          id={getTableElementKey("search")}
           type="text"
-          value={backendSearch ?? filterText}
-          onChange={e => {
-            setCurrentPage(PAGE_FLOOR);
-            onBackendChangePage?.(PAGE_FLOOR);
-
-            if (onBackendSearch) {
-              onBackendSearch(e.target.value);
-              return;
-            }
-
-            setFilterText(e.target.value);
-          }}
+          value={effectiveSearch}
+          onChange={e => handleSearchChange(e.target.value)}
         />
-        <span
-          onClick={() => {
-            if (onBackendSearch) {
-              onBackendSearch("");
-              return;
-            }
-
-            setFilterText("");
-          }}
-          style={(backendSearch ?? filterText) === "" ? { display: "none" } : undefined}
-        >
-          <Icon className="text-[color:--text-secondary] hover:opacity-50" path={mdiClose} size={18} />
-        </span>
+        {effectiveSearch !== "" && (
+          <span onClick={() => handleSearchChange("")}>
+            <Icon className="text-[color:--text-secondary] hover:opacity-50" path={mdiClose} size={18} />
+          </span>
+        )}
       </Flex>
       <div className="grid gap-2">
         <div className="overflow-x-auto">
           <table className="w-full">
-            {filteredData.length > 0 && (
+            {columns.length > 0 && (
               <thead>
                 <tr>
-                  {Object.keys(filteredData[0]).map(key =>
-                    key === BUTTONS_KEY ? (
+                  {columns.map((column, idx) => {
+                    if (column.kind === "actions") {
+                      return <th key={`h-${idx}`} style={{ width: "1%", whiteSpace: "nowrap" }} />;
+                    }
+                    const sortable = isSortable(column);
+                    const isCurrent = sortable && effectiveSort?.key === indicatorKey(column);
+                    return (
                       <th
-                        style={{
-                          width: "1%",
-                          whiteSpace: "nowrap",
-                        }}
-                        key={getTableElementKey(`header-${key}`)}
-                      />
-                    ) : (
-                      <th
-                        className="cursor-pointer align-middle hover:opacity-60"
-                        onClick={onHeaderClick(key)}
-                        key={getTableElementKey(`header-${key}`)}
+                        key={`h-${idx}`}
+                        className={`align-middle ${sortable ? "cursor-pointer hover:opacity-60" : ""}`}
+                        onClick={sortable ? () => handleHeaderClick(column) : undefined}
                       >
-                        {key}
-                        <Icon
-                          className={keySort === undefined ? "opacity-0" : keySort.header !== key ? "opacity-0" : ""}
-                          path={keySort?.order === 1 ? mdiChevronDown : mdiChevronUp}
-                          viewBox={"0 0 18 18"}
-                        />
+                        {column.header}
+                        {sortable && (
+                          <Icon
+                            className={isCurrent ? "" : "opacity-0"}
+                            path={effectiveSort?.order === "asc" ? mdiChevronUp : mdiChevronDown}
+                            viewBox="0 0 18 18"
+                          />
+                        )}
                       </th>
-                    )
-                  )}
+                    );
+                  })}
                 </tr>
               </thead>
             )}
             <tbody>
               {loading ? (
-                Array(perPage)
-                  .fill(0)
-                  .map((_, i) => (
-                    <tr key={getTableElementKey(`shimmer${i}`)}>
-                      <td>
+                Array.from({ length: Math.min(effectivePerPage, 5) }).map((_, i) => (
+                  <tr key={`s-${i}`}>
+                    {columns.map((_, j) => (
+                      <td key={`s-${i}-${j}`}>
                         <Shimmer />
                       </td>
-                      <td>
-                        <Shimmer />
-                      </td>
-                      <td>
-                        <Shimmer />
-                      </td>
-                    </tr>
-                  ))
-              ) : filteredData.length === 0 ? (
+                    ))}
+                  </tr>
+                ))
+              ) : visibleData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={Object.keys(filteredData[0] ?? {}).length}
+                    colSpan={columns.length || 1}
                     className="border-t-[1px] border-[color:var(--border-primary)] text-center font-thin italic opacity-50"
                   >
                     No results available
                   </td>
                 </tr>
               ) : (
-                itemPaginated(filteredData).map((obj, i) => (
-                  <tr key={getTableElementKey(`row-${i}`)}>
-                    {Object.entries<any>(obj).map(([key, value]) => {
-                      // If this column should have max-width and ellipsis
-                      if (maxWidthColumns[key]) {
+                visibleData.map((row, i) => (
+                  <tr key={rowKey ? rowKey(row, i) : row.id}>
+                    {columns.map((column, j) => {
+                      if (column.kind === "actions") {
                         return (
-                          <td className="text-nowrap" key={getTableElementKey(`${key}-value-${i}`)}>
+                          <td key={j} className="sticky right-0" data-buttons-cell>
+                            {column.render(row)}
+                          </td>
+                        );
+                      }
+                      const content = column.render(row);
+                      if (column.maxWidth) {
+                        const text = extractText(content);
+                        return (
+                          <td key={j} className="text-nowrap">
                             <div
                               style={{
-                                maxWidth: maxWidthColumns[key],
+                                maxWidth: column.maxWidth,
                                 whiteSpace: "nowrap",
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                               }}
-                              title={typeof value === "string" ? value : undefined}
+                              title={text || undefined}
                             >
-                              {value}
+                              {content}
                             </div>
                           </td>
                         );
                       }
-
-                      // Default rendering
-                      if (key === BUTTONS_KEY) {
-                        return (
-                          <td className="sticky right-0" data-buttons-cell key={getTableElementKey(`${key}-cell-${i}`)}>
-                            {value}
-                          </td>
-                        );
-                      }
-
                       return (
-                        <td className="text-nowrap" key={getTableElementKey(`${key}-value-${i}`)}>
-                          {value}
+                        <td key={j} className="text-nowrap">
+                          {content}
                         </td>
                       );
                     })}
@@ -294,23 +326,13 @@ export default function Table({
         </div>
         <div>
           <Paginator
-            {...{
-              currentPage: backendCurrentPage ?? currentPage,
-              filteredData,
-              pagesList,
-              perPage,
-              backendTotalRows,
-              setCurrentPage: selectedPage => {
-                setCurrentPage(selectedPage);
-                onBackendChangePage?.(selectedPage);
-              },
-              setPerPage: selectedPerPage => {
-                setCurrentPage(PAGE_FLOOR);
-                onBackendChangePage?.(PAGE_FLOOR);
-                setPerPage(selectedPerPage);
-                onBackendChangePerPage?.(selectedPerPage);
-              },
-            }}
+            currentPage={effectivePage}
+            perPage={effectivePerPage}
+            pagesList={pagesList}
+            filteredData={filteredData}
+            backendTotalRows={pagination?.totalRows}
+            setCurrentPage={setCurrentPage}
+            setPerPage={setPerPage}
           />
         </div>
         <div /> {/* Empty element just to even the last element gap */}
@@ -318,3 +340,4 @@ export default function Table({
     </Card>
   );
 }
+

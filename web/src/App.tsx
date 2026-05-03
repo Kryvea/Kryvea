@@ -1,3 +1,4 @@
+import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { createContext, Dispatch, SetStateAction, useCallback, useLayoutEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { ToastContainer } from "react-toastify";
@@ -135,65 +136,67 @@ export default function App() {
         toastClassName="kryvea-toast"
       />
       <BrowserRouter>
-        <Routes>
-          <Route element={<RouteWatcher />}>
-            <Route element={<Layout />}>
-              {/* Dashboard and Profile */}
-              <Route path="/" element={<Navigate to={"/dashboard"} replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/profile" element={<Profile />} />
+        <NuqsAdapter>
+          <Routes>
+            <Route element={<RouteWatcher />}>
+              <Route element={<Layout />}>
+                {/* Dashboard and Profile */}
+                <Route path="/" element={<Navigate to={"/dashboard"} replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/profile" element={<Profile />} />
 
-              {/* Users */}
-              <Route path="/users" element={<Users />} />
-              <Route path="/users/new" element={<AddUser />} />
+                {/* Users */}
+                <Route path="/users" element={<Users />} />
+                <Route path="/users/new" element={<AddUser />} />
 
-              {/* Customers */}
-              <Route path="/customers" element={<Customers />} />
-              <Route path="/customers/new" element={<AddCustomer />} />
-              <Route path="/customers/:customerId" element={<CustomerDetail />} />
-              <Route path="/customers/:customerId/targets" element={<Targets />} />
-              <Route path="/customers/:customerId/assessments" element={<Assessments />} />
-              <Route path="/customers/:customerId/assessments/new" element={<AssessmentUpsert />} />
-              <Route path="/customers/:customerId/assessments/:assessmentId" element={<AssessmentUpsert />} />
+                {/* Customers */}
+                <Route path="/customers" element={<Customers />} />
+                <Route path="/customers/new" element={<AddCustomer />} />
+                <Route path="/customers/:customerId" element={<CustomerDetail />} />
+                <Route path="/customers/:customerId/targets" element={<Targets />} />
+                <Route path="/customers/:customerId/assessments" element={<Assessments />} />
+                <Route path="/customers/:customerId/assessments/new" element={<AssessmentUpsert />} />
+                <Route path="/customers/:customerId/assessments/:assessmentId" element={<AssessmentUpsert />} />
 
-              {/* Assessments */}
-              <Route
-                path="/customers/:customerId/assessments/:assessmentId/vulnerabilities"
-                element={<AssessmentVulnerabilities />}
-              />
-              <Route
-                path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/new"
-                element={<VulnerabilityUpsert />}
-              />
-              <Route
-                path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId"
-                element={<VulnerabilityDetail />}
-              />
-              <Route
-                path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId/edit"
-                element={<VulnerabilityUpsert />}
-              />
+                {/* Assessments */}
+                <Route
+                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities"
+                  element={<AssessmentVulnerabilities />}
+                />
+                <Route
+                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/new"
+                  element={<VulnerabilityUpsert />}
+                />
+                <Route
+                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId"
+                  element={<VulnerabilityDetail />}
+                />
+                <Route
+                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId/edit"
+                  element={<VulnerabilityUpsert />}
+                />
 
-              {/* Vulnerabilities */}
-              <Route path="/vulnerability_search" element={<VulnerabilitySearch />} />
-              <Route
-                path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId/pocs"
-                element={<PocsUpsert />}
-              />
+                {/* Vulnerabilities */}
+                <Route path="/vulnerability_search" element={<VulnerabilitySearch />} />
+                <Route
+                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId/pocs"
+                  element={<PocsUpsert />}
+                />
 
-              {/* Categories */}
-              <Route path="/categories" element={<Categories />} />
-              <Route path="/categories/new" element={<CategoryUpsert />} />
-              <Route path="/categories/:categoryId" element={<CategoryUpsert />} />
+                {/* Categories */}
+                <Route path="/categories" element={<Categories />} />
+                <Route path="/categories/new" element={<CategoryUpsert />} />
+                <Route path="/categories/:categoryId" element={<CategoryUpsert />} />
 
-              {/* Other */}
-              <Route path="/logs" element={<Logs />} />
-              <Route path="/templates" element={<Templates />} />
-              <Route path="/settings" element={<Settings />} />
+                {/* Other */}
+                <Route path="/logs" element={<Logs />} />
+                <Route path="/templates" element={<Templates />} />
+                <Route path="/settings" element={<Settings />} />
+              </Route>
+              <Route path="/login" element={<Login />} />
             </Route>
-            <Route path="/login" element={<Login />} />
-          </Route>
-        </Routes>
+          </Routes>
+        </NuqsAdapter>
       </BrowserRouter>
     </GlobalContext.Provider>
   );

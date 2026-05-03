@@ -7,7 +7,7 @@ import Grid from "../components/Composition/Grid";
 import Modal from "../components/Composition/Modal";
 import PageHeader from "../components/Composition/PageHeader";
 import Subtitle from "../components/Composition/Subtitle";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import DateCalendar from "../components/Form/DateCalendar";
@@ -15,7 +15,8 @@ import Input from "../components/Form/Input";
 import SelectWrapper from "../components/Form/SelectWrapper";
 import { SelectOption } from "../components/Form/SelectWrapper.types";
 import { Customer, User } from "../types/common.types";
-import { getPageTitle, sortBy } from "../utils/helpers";
+import { getPageTitle } from "../utils/helpers";
+import { useTableUrlState } from "../utils/useTableUrlState";
 
 export default function Users() {
   const [username, setUsername] = useState("");
@@ -26,6 +27,8 @@ export default function Users() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+
+  const t = useTableUrlState({ defaultLimit: 50, defaultSort: { key: "Username", order: "asc" } });
   const [customers, setCustomers] = useState<Customer[]>([]);
 
   const [isModalResetPswActive, setIsModalResetPswActive] = useState(false);
@@ -125,6 +128,56 @@ export default function Users() {
       fetchUsers();
     });
   };
+
+  const userColumns: Column<User>[] = [
+    { header: "Username", render: user => user.username },
+    { header: "Role", render: user => user.role },
+    {
+      header: "Customers",
+      maxWidth: "20rem",
+      render: user => {
+        if (user.role === "admin") {
+          return "All";
+        }
+        return user.customers
+          ?.map(customer => customer.name)
+          .sort()
+          .join(" | ");
+      },
+    },
+    {
+      header: "Active",
+      render: user => (Date.parse(user.disabled_at) > Date.now() ? "Yes" : "No"),
+    },
+    {
+      kind: "actions",
+      render: user => (
+        <Buttons noWrap>
+          <Button
+            variant="tertiary"
+            icon={mdiAccountEdit}
+            onClick={() => openEditModal(user)}
+            small
+            title="Edit user"
+          />
+          <Button
+            variant="warning"
+            icon={mdiLockReset}
+            onClick={() => openResetPswModal(user)}
+            small
+            title="Reset password"
+          />
+          <Button
+            variant="danger"
+            icon={mdiTrashCan}
+            onClick={() => openDeleteModal(user.id)}
+            small
+            title="Delete user"
+          />
+        </Buttons>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -251,45 +304,12 @@ export default function Users() {
       {/* Users Table */}
       <Table
         loading={loadingUsers}
-        data={users.sort(sortBy("username", { caseInsensitive: true })).map(user => ({
-          Username: user.username,
-          Role: user.role,
-          Customers:
-            user.role === "admin"
-              ? "All"
-              : user.customers
-                  ?.map(customer => customer.name)
-                  .sort()
-                  .join(" | "),
-          Active: Date.parse(user.disabled_at) > Date.now() ? "Yes" : "No",
-          buttons: (
-            <Buttons noWrap key={user.id}>
-              <Button
-                variant="tertiary"
-                icon={mdiAccountEdit}
-                onClick={() => openEditModal(user)}
-                small
-                title="Edit user"
-              />
-              <Button
-                variant="warning"
-                icon={mdiLockReset}
-                onClick={() => openResetPswModal(user)}
-                small
-                title="Reset password"
-              />
-              <Button
-                variant="danger"
-                icon={mdiTrashCan}
-                onClick={() => openDeleteModal(user.id)}
-                small
-                title="Delete user"
-              />
-            </Buttons>
-          ),
-        }))}
-        perPageCustom={50}
-        maxWidthColumns={{ Customers: "20rem" }}
+        columns={userColumns}
+        data={users}
+        search={t.search}
+        sort={t.sort}
+        onSortChange={t.onSortChange}
+        pagination={t.pagination}
       />
     </div>
   );

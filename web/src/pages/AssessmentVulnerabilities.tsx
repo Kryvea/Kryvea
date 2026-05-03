@@ -8,26 +8,21 @@ import Flex from "../components/Composition/Flex";
 import Grid from "../components/Composition/Grid";
 import Modal from "../components/Composition/Modal";
 import PageHeader from "../components/Composition/PageHeader";
-import Table from "../components/Composition/Table";
+import Table, { Column } from "../components/Composition/Table";
 import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import SelectWrapper from "../components/Form/SelectWrapper";
 import UploadFile from "../components/Form/UploadFile";
 import AddTargetModal from "../components/Modals/AddTargetModal";
 import ExportReportModal from "../components/Modals/ExportReportModal";
-import { useDebounce } from "../hooks/hooks";
 import { Category, Template, Vulnerability } from "../types/common.types";
 import { formatDate } from "../utils/dates";
 import { formatVulnerabilityTitle, getPageTitle } from "../utils/helpers";
 import { getTargetLabel } from "../utils/targetLabel";
-
-const DEFAULT_QUERY = "";
-const DEFAULT_PAGE = 1;
-const DEFAULT_LIMIT = 25;
+import { useTableUrlState } from "../utils/useTableUrlState";
 
 export default function AssessmentVulnerabilities() {
   const navigate = useNavigate();
-  const location = useLocation();
   const {
     useCtxAssessment: [ctxAssessment],
   } = useContext(GlobalContext);
@@ -53,21 +48,20 @@ export default function AssessmentVulnerabilities() {
   const [loadingVulnerabilities, setLoadingVulnerabilities] = useState(true);
   const [vulnerabilityToDelete, setVulnerabilityToDelete] = useState<Vulnerability | null>(null);
 
-  const searchAPI = useMemo(() => `/api/assessments/${assessmentId}/vulnerabilities?`, []);
-  const urlSearchParams = new URLSearchParams(location.search);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const { search } = useLocation();
 
-  // Main search
-  const [query, setQuery] = useState(urlSearchParams.get("query") ?? DEFAULT_QUERY);
-  const debouncedQuery = useDebounce(query, 400);
+  const t = useTableUrlState({ defaultSort: { key: "updated_at", order: "desc" } });
 
-  // Pagination
-  const [page, setPage] = useState(Math.max(+urlSearchParams.get("page") || DEFAULT_PAGE, DEFAULT_PAGE));
-  const [limit, setLimit] = useState(+urlSearchParams.get("limit") || DEFAULT_LIMIT);
+  useEffect(() => {
+    document.title = getPageTitle("Assessment Vulnerabilities");
+    getData<Template[]>("/api/templates", setAllTemplates);
+  }, []);
 
-  function fetchVulnerabilitiesPaginated(searchParams) {
+  useEffect(() => {
     const paginationLoadingsTimeout = setTimeout(() => setLoadingVulnerabilities(true), 750);
-    getData<any>(
-      searchAPI + searchParams,
+    getData<{ total_pages: number; total_documents: number; data: Vulnerability[] }>(
+      `/api/assessments/${assessmentId}/vulnerabilities${search}`,
       data => {
         setTotalVulnerabilities(data.total_documents);
         setVulnerabilities(data.data);
@@ -79,49 +73,66 @@ export default function AssessmentVulnerabilities() {
         setLoadingVulnerabilities(false);
       }
     );
-  }
+  }, [search, refreshNonce]);
 
-  useEffect(() => {
-    document.title = getPageTitle("Assessment Vulnerabilities");
-    getData<Template[]>("/api/templates", setAllTemplates);
-  }, []);
-
-  // Sync with URL when user uses browser buttons
-  useEffect(() => {
-    setQuery(urlSearchParams.get("query") ?? DEFAULT_QUERY);
-    setPage(Math.max(+urlSearchParams.get("page") || DEFAULT_PAGE, DEFAULT_PAGE));
-    setLimit(+urlSearchParams.get("limit") || DEFAULT_LIMIT);
-  }, [location.search]);
-
-  // Fetch data
-  useEffect(() => {
-    const searchParams = buildSearchParams();
-
-    if (location.search !== `?${searchParams}`) {
-      navigate(`?${searchParams}`, { replace: false });
+  const columns = useMemo((): Column<Vulnerability>[] => {
+    const cols: Column<Vulnerability>[] = [
+      {
+        header: "Vulnerability",
+        sortKey: "title",
+        maxWidth: "40rem",
+        render: vulnerability => <Link to={vulnerability.id}>{formatVulnerabilityTitle(vulnerability)}</Link>,
+      },
+      {
+        header: "Target",
+        maxWidth: "15rem",
+        render: vulnerability => getTargetLabel(vulnerability.target),
+      },
+    ];
+    if (ctxAssessment?.cvss_versions["2.0"]) {
+      cols.push({
+        header: "CVSSv2.0 Score",
+        sortKey: "cvssv2_score",
+        render: vulnerability => vulnerability.cvssv2.score,
+      });
     }
+    if (ctxAssessment?.cvss_versions["3.1"]) {
+      cols.push({
+        header: "CVSSv3.1 Score",
+        sortKey: "cvssv31_score",
+        render: vulnerability => vulnerability.cvssv31.score,
+      });
+    }
+    if (ctxAssessment?.cvss_versions["4.0"]) {
+      cols.push({
+        header: "CVSSv4.0 Score",
+        sortKey: "cvssv4_score",
+        render: vulnerability => vulnerability.cvssv4.score,
+      });
+    }
+    cols.push(
+      { header: "Status", sortKey: "status", render: vulnerability => vulnerability.status },
+      { header: "User", sortKey: "username", render: vulnerability => vulnerability.user.username },
+      {
+        header: "Last update",
+        sortKey: "updated_at",
+        render: vulnerability => formatDate(vulnerability.updated_at),
+      },
+      {
+        kind: "actions",
+        render: vulnerability => (
+          <Buttons noWrap>
+            <Button variant="tertiary" icon={mdiPencil} small onClick={() => navigate(`${vulnerability.id}/edit`)} />
+            <Button variant="danger" icon={mdiTrashCan} small onClick={() => openDeleteModal(vulnerability)} />
+          </Buttons>
+        ),
+      }
+    );
+    return cols;
+  }, [ctxAssessment?.cvss_versions]);
 
-    fetchVulnerabilitiesPaginated(searchParams);
-  }, [debouncedQuery, limit, page]);
-
-  // Build API params
-  const buildSearchParams = () => {
-    const sp = new URLSearchParams({
-      query: debouncedQuery,
-      page: page.toString(),
-      limit: limit.toString(),
-    });
-
-    return sp.toString();
-  };
-
-  const openExportModal = () => {
-    setIsModalDownloadActive(true);
-  };
-
-  const openTargetModal = () => {
-    setIsModalTargetActive(true);
-  };
+  const openExportModal = () => setIsModalDownloadActive(true);
+  const openTargetModal = () => setIsModalTargetActive(true);
 
   const openDeleteModal = (vulnerability: Vulnerability) => {
     setVulnerabilityToDelete(vulnerability);
@@ -180,7 +191,7 @@ export default function AssessmentVulnerabilities() {
         });
         setIsModalUploadActive(false);
         setFileObj(null);
-        setPage(1); // trigger data refetch
+        setRefreshNonce(n => n + 1);
       },
       err => {
         toast.update(toastId, {
@@ -268,54 +279,18 @@ export default function AssessmentVulnerabilities() {
             onClick={() => setIsModalUploadActive(true)}
           />
           <Button variant="tertiary" icon={mdiDownload} text="Download report" small onClick={openExportModal} />
-          {/* <Button icon={mdiFileEye} text="Live editor" small disabled onClick={() => navigate("/live_editor")} /> */}
         </Buttons>
       </PageHeader>
 
       <Grid className="gap-4">
         <Table
+          columns={columns}
+          data={vulnerabilities}
           loading={loadingVulnerabilities}
-          backendCurrentPage={page}
-          backendTotalRows={totalVulnerabilities}
-          backendTotalPages={totalPages}
-          backendSearch={query}
-          onBackendSearch={setQuery}
-          onBackendChangePage={setPage}
-          onBackendChangePerPage={setLimit}
-          data={vulnerabilities.map(vulnerability => {
-            const cvssColumns = {};
-            if (ctxAssessment?.cvss_versions["2.0"]) {
-              cvssColumns["CVSSv2.0 Score"] = vulnerability.cvssv2.score;
-            }
-            if (ctxAssessment?.cvss_versions["3.1"]) {
-              cvssColumns["CVSSv3.1 Score"] = vulnerability.cvssv31.score;
-            }
-            if (ctxAssessment?.cvss_versions["4.0"]) {
-              cvssColumns["CVSSv4.0 Score"] = vulnerability.cvssv4.score;
-            }
-
-            return {
-              Vulnerability: <Link to={vulnerability.id}>{formatVulnerabilityTitle(vulnerability)}</Link>,
-              Target: getTargetLabel(vulnerability.target),
-              ...cvssColumns,
-              Status: vulnerability.status,
-              User: vulnerability.user.username,
-              "Last update": formatDate(vulnerability.updated_at),
-              buttons: (
-                <Buttons noWrap>
-                  <Button
-                    variant="tertiary"
-                    icon={mdiPencil}
-                    small
-                    onClick={() => navigate(`${vulnerability.id}/edit`)}
-                  />
-                  <Button variant="danger" icon={mdiTrashCan} onClick={() => openDeleteModal(vulnerability)} small />
-                </Buttons>
-              ),
-            };
-          })}
-          perPageCustom={limit}
-          maxWidthColumns={{ Vulnerability: "40rem", Target: "15rem" }}
+          search={t.search}
+          sort={t.sort}
+          onSortChange={t.onSortChange}
+          pagination={{ ...t.pagination, totalRows: totalVulnerabilities, totalPages }}
         />
       </Grid>
     </div>
