@@ -15,6 +15,7 @@ type TargetStore interface {
 	Delete(ctx context.Context, targetID uuid.UUID) error
 
 	GetByIDWithRelations(ctx context.Context, targetID uuid.UUID) (*model.Target, error)
+	ExistingIDsForCustomer(ctx context.Context, ids []uuid.UUID, customerID uuid.UUID) ([]uuid.UUID, error)
 
 	Search(ctx context.Context, customerID uuid.UUID, query string) ([]model.Target, error)
 }

@@ -131,6 +131,11 @@ var ddlStatements = []string{
 	`CREATE INDEX IF NOT EXISTS idx_target_customer             ON target (customer_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_target_fqdn_trgm            ON target USING gin (fqdn gin_trgm_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_target_ipv4_trgm            ON target USING gin (ipv4 gin_trgm_ops)`,
+
+	`ALTER TABLE target DROP CONSTRAINT IF EXISTS target_natural_key`,
+	`ALTER TABLE target ADD CONSTRAINT target_natural_key
+		UNIQUE (ipv4, ipv6, fqdn, tag, port, protocol, customer_id)`,
+
 	`CREATE INDEX IF NOT EXISTS idx_assessment_customer         ON assessment (customer_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_assessment_name_trgm        ON assessment USING gin (name gin_trgm_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_assessment_target_target    ON assessment_target (target_id)`,

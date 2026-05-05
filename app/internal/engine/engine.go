@@ -67,9 +67,7 @@ func (e *Engine) Serve() {
 
 		apiGroup.Get("/customers/:customer/targets", api.GetTargetsByCustomer)
 		apiGroup.Get("/targets/:target", api.GetTarget)
-		apiGroup.Post("/targets", api.AddTarget)
-		apiGroup.Patch("/targets/:target", api.UpdateTarget)
-		apiGroup.Delete("/targets/:target", api.DeleteTarget)
+		apiGroup.Patch("/targets/bulk", api.BulkTargets)
 
 		apiGroup.Get("/categories/search", api.SearchCategories)
 		apiGroup.Get("/categories", api.GetCategories)

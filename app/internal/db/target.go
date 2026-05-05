@@ -50,7 +50,9 @@ func (ti *TargetIndex) FirstOrInsert(ctx context.Context, target *model.Target, 
 		Where("ipv4 = ?", target.IPv4).
 		Where("ipv6 = ?", target.IPv6).
 		Where("fqdn = ?", target.FQDN).
-		Where("tag = ?", target.Tag)
+		Where("tag = ?", target.Tag).
+		Where("port = ?", target.Port).
+		Where("protocol = ?", target.Protocol)
 	if customerID == uuid.Nil {
 		q = q.Where("customer_id IS NULL")
 	} else {
@@ -102,6 +104,29 @@ func (ti *TargetIndex) GetByIDWithRelations(ctx context.Context, id uuid.UUID) (
 	}
 	out := row.toModel()
 	return &out, nil
+}
+
+func (ti *TargetIndex) ExistingIDsForCustomer(ctx context.Context, ids []uuid.UUID, customerID uuid.UUID) ([]uuid.UUID, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []struct {
+		ID uuid.UUID `bun:"id"`
+	}
+	err := idbFrom(ctx, ti.driver.db).NewSelect().
+		Model((*dbTarget)(nil)).
+		Column("id").
+		Where("id IN (?)", bun.List(ids)).
+		Where("customer_id = ?", customerID).
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	out := make([]uuid.UUID, len(rows))
+	for i, r := range rows {
+		out[i] = r.ID
+	}
+	return out, nil
 }
 
 func (ti *TargetIndex) Search(ctx context.Context, customerID uuid.UUID, query string) ([]model.Target, error) {

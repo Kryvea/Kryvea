@@ -202,8 +202,8 @@ type dbTarget struct {
 	IPv6       string     `bun:"ipv6,notnull,default:'',unique:target_natural_key"`
 	FQDN       string     `bun:"fqdn,notnull,default:'',unique:target_natural_key"`
 	Tag        string     `bun:"tag,notnull,default:'',unique:target_natural_key"`
-	Protocol   string     `bun:"protocol,notnull,default:''"`
-	Port       int        `bun:"port,notnull,default:0"`
+	Protocol   string     `bun:"protocol,notnull,default:'',unique:target_natural_key"`
+	Port       int        `bun:"port,notnull,default:0,unique:target_natural_key"`
 	CustomerID *uuid.UUID `bun:"customer_id,nullzero,type:uuid,unique:target_natural_key"`
 
 	Customer *dbCustomer `bun:"rel:belongs-to,join:customer_id=id"`
