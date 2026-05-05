@@ -26,6 +26,15 @@ import (
 
 var multiNewline = regexp.MustCompile(`\n{3,}`)
 var whitespaceRun = regexp.MustCompile(`\s+`)
+var nessusBullet = regexp.MustCompile(`^\s*[-*]\s+`)
+var inlineSpaces = regexp.MustCompile(`[ \t]+`)
+
+func dropNA(s string) string {
+	if strings.EqualFold(strings.TrimSpace(s), "n/a") {
+		return ""
+	}
+	return s
+}
 
 var burpSeverityVector = map[string]string{
 	"Low":      "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
@@ -131,7 +140,7 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 
 	_, err = d.db.RunInTx(ctx, func(ctx context.Context) (any, error) {
 		for _, issue := range burpData.Issues {
-			var hostFQDN string
+			var hostFQDN, protocol string
 			var port int
 			if u, err := url.Parse(issue.Host.Name); err == nil && u.Host != "" {
 				if hostname := u.Hostname(); net.ParseIP(hostname) == nil {
@@ -140,17 +149,19 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				if p, err := strconv.Atoi(u.Port()); err == nil {
 					port = p
 				}
+				protocol = u.Scheme
 			}
 			target := &model.Target{
-				FQDN: hostFQDN,
-				Port: port,
-				Tag:  "burp",
+				FQDN:     dropNA(hostFQDN),
+				Port:     port,
+				Protocol: dropNA(protocol),
+				Tag:      "burp",
 			}
-			if ip := net.ParseIP(issue.Host.IP); ip != nil {
+			if ip := net.ParseIP(dropNA(issue.Host.IP)); ip != nil {
 				target.IPv4 = ""
-				target.IPv6 = issue.Host.IP
+				target.IPv6 = ip.String()
 				if ip.To4() != nil {
-					target.IPv4 = issue.Host.IP
+					target.IPv4 = ip.String()
 					target.IPv6 = ""
 				}
 			}
@@ -165,11 +176,11 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 			}
 
 			category := &model.Category{
-				Identifier:         strings.Trim(issue.Type, "\r\n "),
-				Name:               strings.Trim(issue.Name, "\r\n "),
+				Identifier:         dropNA(strings.Trim(issue.Type, "\r\n ")),
+				Name:               dropNA(strings.Trim(issue.Name, "\r\n ")),
 				Subcategory:        "",
-				GenericDescription: map[string]string{"en": htmlToText(issue.IssueBackground)},
-				GenericRemediation: map[string]string{"en": htmlToText(issue.RemediationBackground)},
+				GenericDescription: map[string]string{"en": dropNA(htmlToText(issue.IssueBackground))},
+				GenericRemediation: map[string]string{"en": dropNA(htmlToText(issue.RemediationBackground))},
 				LanguagesOrder:     []string{"en"},
 				References:         htmlToRefs(issue.VulnerabilityClassifications),
 				Source:             model.SourceBurp,
@@ -191,8 +202,8 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				CVSSv4:      cvss.InfoVector4,
 				Status:      strings.Trim(model.VulnerabilityStatusOpen, "\r\n "),
 				References:  htmlToRefs(issue.References),
-				Description: htmlToText(issue.IssueDetail),
-				Remediation: htmlToText(issue.RemediationDetail),
+				Description: dropNA(htmlToText(issue.IssueDetail)),
+				Remediation: dropNA(htmlToText(issue.RemediationDetail)),
 				GenericRemediation: model.VulnerabilityGeneric{
 					Enabled: true,
 				},
@@ -289,7 +300,7 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index: i,
 					Type:  pocpkg.PocTypeText,
-					TextData: strings.Trim(fmt.Sprintf(`Interaction Type: %s
+					TextData: fmt.Sprintf(`Interaction Type: %s
 Origin IP: %s
 Time: %s
 Lookup Type: %s
@@ -299,7 +310,7 @@ Lookup Host: %s`,
 						collaboratorEvent.Time,
 						collaboratorEvent.LookupType,
 						collaboratorEvent.LookupHost,
-					), "\r\n "),
+					),
 					Request:  strings.Trim(string(request), "\r\n "),
 					Response: strings.Trim(string(response), "\r\n "),
 				})
@@ -310,7 +321,7 @@ Lookup Host: %s`,
 				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index: i,
 					Type:  pocpkg.PocTypeText,
-					TextData: strings.Trim(fmt.Sprintf(`Parameter Name: %s
+					TextData: fmt.Sprintf(`Parameter Name: %s
 Platform: %s
 Signature: %s
 Stack Trace: %s
@@ -320,7 +331,7 @@ Parameter Value: %s`,
 						infiltratorEvent.Signature,
 						infiltratorEvent.StackTrace,
 						infiltratorEvent.ParameterValue,
-					), "\r\n "),
+					),
 				})
 
 				i++
@@ -370,26 +381,15 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 			for _, property := range host.HostProperties.Tag {
 				switch property.Name {
 				case "host-ip":
-					hostIP = property.Text
+					hostIP = dropNA(property.Text)
 				case "host-fqdn":
-					hostFQDN = property.Text
+					hostFQDN = dropNA(property.Text)
 				case "host-rdns":
-					hostRDNS = property.Text
+					hostRDNS = dropNA(property.Text)
 				}
 			}
 			if hostFQDN == hostRDNS {
 				hostFQDN = ""
-			}
-
-			targetKey := hostIP + "|" + hostFQDN
-			targetID, ok := targetCache[targetKey]
-			if !ok {
-				target := &model.Target{IPv4: hostIP, FQDN: hostFQDN, Tag: "nessus"}
-				targetID, _, err = d.db.Target().FirstOrInsert(ctx, target, customer.ID)
-				if err != nil {
-					return nil, err
-				}
-				targetCache[targetKey] = targetID
 			}
 
 			for _, item := range host.ReportItems {
@@ -397,16 +397,34 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 					continue
 				}
 
+				itemProtocol := dropNA(item.Protocol)
+				targetKey := fmt.Sprintf("%s|%s|%d|%s", hostIP, hostFQDN, item.Port, itemProtocol)
+				targetID, ok := targetCache[targetKey]
+				if !ok {
+					target := &model.Target{
+						IPv4:     hostIP,
+						FQDN:     hostFQDN,
+						Port:     item.Port,
+						Protocol: itemProtocol,
+						Tag:      "nessus",
+					}
+					targetID, _, err = d.db.Target().FirstOrInsert(ctx, target, customer.ID)
+					if err != nil {
+						return nil, err
+					}
+					targetCache[targetKey] = targetID
+				}
+
 				catKey := item.PluginID
 				categoryID, ok := categoryCache[catKey]
 				if !ok {
 					category := &model.Category{
-						Identifier:         strings.Trim(item.PluginID, "\r\n "),
-						Name:               strings.Trim(item.PluginName, "\r\n "),
-						GenericDescription: map[string]string{"en": strings.Trim(item.Description, "\r\n ")},
-						GenericRemediation: map[string]string{"en": strings.Trim(item.Solution, "\r\n ")},
+						Identifier:         dropNA(strings.Trim(item.PluginID, "\r\n ")),
+						Name:               dropNA(strings.Trim(item.PluginName, "\r\n ")),
+						GenericDescription: map[string]string{"en": dropNA(nessusToText(item.Description))},
+						GenericRemediation: map[string]string{"en": dropNA(nessusToText(item.Solution))},
 						LanguagesOrder:     []string{"en"},
-						References:         strings.Split(item.SeeAlso, "\n"),
+						References:         splitNessusRefs(item.SeeAlso),
 						Source:             model.SourceNessus,
 					}
 					categoryID, _, err = d.db.Category().FirstOrInsert(ctx, category)
@@ -424,8 +442,7 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 					CVSSv4:      cvss.InfoVector4,
 					Status:      model.VulnerabilityStatusOpen,
 					References:  []string{},
-					Description: strings.Trim(item.Synopsis, "\r\n "),
-					Remediation: strings.Trim(item.Solution, "\r\n "),
+					Description: dropNA(nessusToText(item.Synopsis)),
 					GenericRemediation: model.VulnerabilityGeneric{
 						Enabled: true,
 					},
@@ -455,7 +472,7 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 					Pocs: []model.PocItem{{
 						Type:         "text",
 						TextLanguage: "plaintext",
-						TextData:     strings.Trim(item.PluginOutput, "\r\n "),
+						TextData:     dropNA(strings.Trim(item.PluginOutput, "\r\n ")),
 					}},
 				})
 				vulns = append(vulns, vuln)
@@ -572,5 +589,53 @@ func htmlToRefs(s string) []string {
 		}
 	}
 	walk(doc)
+	return refs
+}
+
+func nessusToText(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	var out []string
+	for _, p := range strings.Split(s, "\n\n") {
+		var blocks []string
+		var current strings.Builder
+		flush := func() {
+			if t := strings.TrimSpace(inlineSpaces.ReplaceAllString(current.String(), " ")); t != "" {
+				blocks = append(blocks, t)
+			}
+			current.Reset()
+		}
+		for _, line := range strings.Split(p, "\n") {
+			if nessusBullet.MatchString(line) {
+				flush()
+				current.WriteString("• ")
+				current.WriteString(strings.TrimSpace(nessusBullet.ReplaceAllString(line, "")))
+			} else {
+				if current.Len() > 0 {
+					current.WriteString(" ")
+				}
+				current.WriteString(strings.TrimSpace(line))
+			}
+		}
+		flush()
+		if len(blocks) > 0 {
+			out = append(out, strings.Join(blocks, "\n"))
+		}
+	}
+	return multiNewline.ReplaceAllString(strings.TrimSpace(strings.Join(out, "\n\n")), "\n\n")
+}
+
+func splitNessusRefs(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	var refs []string
+	for _, ref := range strings.Split(s, "\n") {
+		if ref = strings.TrimSpace(ref); ref != "" {
+			refs = append(refs, ref)
+		}
+	}
 	return refs
 }

@@ -24,7 +24,7 @@ func aggregateVulnerabilities(vulnerabilities []model.Vulnerability) []Aggregate
 
 		if existing, ok := aggregatedMap[categoryID]; ok {
 			existing.Targets = appendUniqueTarget(existing.Targets, v.Target)
-			existing.Poc.Pocs = append(existing.Poc.Pocs, v.Poc.Pocs...)
+			existing.Poc.Pocs = appendUniquePocItems(existing.Poc.Pocs, v.Poc.Pocs)
 			continue
 		}
 
@@ -32,7 +32,7 @@ func aggregateVulnerabilities(vulnerabilities []model.Vulnerability) []Aggregate
 		order = append(order, categoryID)
 	}
 
-	aggregatedVulnerabilities := make([]AggregatedVulnerability, len(order))
+	aggregatedVulnerabilities := make([]AggregatedVulnerability, 0, len(order))
 	for _, id := range order {
 		aggregatedVulnerabilities = append(aggregatedVulnerabilities, *aggregatedMap[id])
 	}
@@ -63,4 +63,39 @@ func appendUniqueTarget(targets []model.Target, newTarget model.Target) []model.
 		}
 	}
 	return append(targets, newTarget)
+}
+
+// dedupes by content; ID and Index are intentionally ignored
+func appendUniquePocItems(existing []model.PocItem, incoming []model.PocItem) []model.PocItem {
+	for _, item := range incoming {
+		if containsPocItem(existing, item) {
+			continue
+		}
+		existing = append(existing, item)
+	}
+	return existing
+}
+
+func containsPocItem(items []model.PocItem, target model.PocItem) bool {
+	for _, item := range items {
+		if pocItemContentEqual(item, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func pocItemContentEqual(a, b model.PocItem) bool {
+	return a.Type == b.Type &&
+		a.Description == b.Description &&
+		a.URI == b.URI &&
+		a.Request == b.Request &&
+		a.Response == b.Response &&
+		a.ImageID == b.ImageID &&
+		a.ImageReference == b.ImageReference &&
+		a.ImageFilename == b.ImageFilename &&
+		a.ImageCaption == b.ImageCaption &&
+		a.TextLanguage == b.TextLanguage &&
+		a.TextData == b.TextData &&
+		a.StartingLineNumber == b.StartingLineNumber
 }
