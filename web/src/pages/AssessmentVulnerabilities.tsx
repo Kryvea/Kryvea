@@ -13,7 +13,7 @@ import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import SelectWrapper from "../components/Form/SelectWrapper";
 import UploadFile from "../components/Form/UploadFile";
-import AddTargetModal from "../components/Modals/AddTargetModal";
+import UpsertTargetModal from "../components/Modals/UpsertTargetModal";
 import ExportReportModal from "../components/Modals/ExportReportModal";
 import { Category, Template, Vulnerability } from "../types/common.types";
 import { formatDate } from "../utils/dates";
@@ -208,8 +208,9 @@ export default function AssessmentVulnerabilities() {
 
   return (
     <div>
-      {/* Add Target Modal */}
-      {isModalTargetActive && <AddTargetModal setShowModal={setIsModalTargetActive} assessmentId={assessmentId} />}
+      {isModalTargetActive && (
+        <UpsertTargetModal setShowModal={setIsModalTargetActive} assessmentId={assessmentId} />
+      )}
 
       {isModalDownloadActive && (
         <ExportReportModal

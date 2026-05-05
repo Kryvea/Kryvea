@@ -69,7 +69,7 @@ export default function Modal({
           <CardTitle title={title} subtitle={subtitle}>
             {onCancel && <Button variant="transparent" icon={mdiClose} onClick={onCancel} small />}
           </CardTitle>
-          <div className="max-h-[70vh]">{children}</div>
+          <div className="max-h-[70vh] overflow-y-auto pr-2 [scrollbar-gutter:stable]">{children}</div>
         </Card>
       </div>
     </div>

@@ -17,11 +17,12 @@ import Input from "../components/Form/Input";
 import Label from "../components/Form/Label";
 import SelectWrapper from "../components/Form/SelectWrapper";
 import { SelectOption } from "../components/Form/SelectWrapper.types";
-import AddTargetModal from "../components/Modals/AddTargetModal";
+import UpsertTargetModal from "../components/Modals/UpsertTargetModal";
 import { Assessment, Target } from "../types/common.types";
 import { Keys } from "../types/utils.types";
 import { languageMapping } from "../utils/constants";
 import { getPageTitle } from "../utils/helpers";
+import { groupTargets } from "../utils/targetGroups";
 import { getTargetLabel } from "../utils/targetLabel";
 
 type AssessmentPayload = Omit<
@@ -195,13 +196,26 @@ export default function AssessmentUpsert() {
     }
   }, [isEdit, customerId, assessmentId, navigate]);
 
-  const targetOptions: SelectOption[] = useMemo(
-    () =>
-      targets.map(target => ({
-        value: target.id,
-        label: getTargetLabel(target),
-      })),
-    [targets]
+  const [aggregateByHost, setAggregateByHost] = useState(true);
+
+  const targetGroups = useMemo(() => groupTargets(targets), [targets]);
+
+  const targetOptions: SelectOption[] = useMemo(() => {
+    if (aggregateByHost) {
+      return targetGroups.map(g => ({
+        value: g.id,
+        label: `${getTargetLabel(g.rows[0])} (${g.rows.length} port${g.rows.length === 1 ? "" : "s"})`,
+      }));
+    }
+    return targets.map(target => ({
+      value: target.id,
+      label: getTargetLabel(target),
+    }));
+  }, [aggregateByHost, targetGroups, targets]);
+
+  const selectedTargetValues = useMemo(
+    () => form.targets.map(tgt => ({ value: tgt.id, label: getTargetLabel(tgt) })),
+    [form.targets]
   );
 
   const handleChange = (field: keyof typeof form, value: any) => {
@@ -237,7 +251,26 @@ export default function AssessmentUpsert() {
   };
 
   const handleTargetsChange = (options: SelectOption[] | null) => {
-    handleChange("targets", options ? options.map(opt => targets.find(t => t.id === opt.value)!).filter(Boolean) : []);
+    const next: Target[] = [];
+    const seen = new Set<string>();
+    for (const opt of options ?? []) {
+      const group = targetGroups.find(g => g.id === opt.value);
+      if (group) {
+        for (const r of group.rows) {
+          if (!seen.has(r.id)) {
+            seen.add(r.id);
+            next.push(r);
+          }
+        }
+        continue;
+      }
+      const tgt = targets.find(t => t.id === opt.value);
+      if (tgt && !seen.has(tgt.id)) {
+        seen.add(tgt.id);
+        next.push(tgt);
+      }
+    }
+    handleChange("targets", next);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -280,14 +313,15 @@ export default function AssessmentUpsert() {
     setIsModalTargetActive(true);
   };
 
-  const handleTargetCreated = createdTargetId => {
+  const handleTargetCreated = (createdIds?: string[]) => {
+    const ids = createdIds ?? [];
     getData<Target[]>(`/api/customers/${customerId}/targets`, newTargets => {
       setTargets(newTargets);
-      const newTarget = newTargets.find(t => t.id === createdTargetId);
-      if (newTarget) {
+      const created = newTargets.filter(t => ids.includes(t.id));
+      if (created.length > 0) {
         setForm(prev => ({
           ...prev,
-          targets: [...prev.targets, newTarget],
+          targets: [...prev.targets, ...created],
         }));
       }
     });
@@ -296,10 +330,10 @@ export default function AssessmentUpsert() {
   return (
     <div>
       {isModalTargetActive && (
-        <AddTargetModal
+        <UpsertTargetModal
           setShowModal={setIsModalTargetActive}
           assessmentId={assessmentId}
-          onTargetCreated={handleTargetCreated}
+          onSaved={handleTargetCreated}
         />
       )}
 
@@ -381,19 +415,25 @@ export default function AssessmentUpsert() {
                 </Flex>
               </Grid>
             </Grid>
-            <Grid className="grid-cols-[1fr_auto]">
-              <SelectWrapper
-                label="Session targets"
-                id="targets"
-                options={targetOptions}
-                isMulti
-                value={targetOptions.filter(
-                  opt => Array.isArray(form.targets) && form.targets.some(t => t.id === opt.value)
-                )}
-                onChange={handleTargetsChange}
-                closeMenuOnSelect={false}
-              />
-              <Button icon={mdiPlus} text="New Target" onClick={openTargetModal} />
+            <Grid>
+              <Label text="Session targets" htmlFor="targets" />
+              <Grid className="grid-cols-[1fr_auto_auto] items-center">
+                <SelectWrapper
+                  id="targets"
+                  options={targetOptions}
+                  isMulti
+                  value={selectedTargetValues}
+                  onChange={handleTargetsChange}
+                  closeMenuOnSelect={false}
+                />
+                <Checkbox
+                  id="aggregate-by-host"
+                  label="Aggregate by host"
+                  checked={aggregateByHost}
+                  onChange={e => setAggregateByHost(e.target.checked)}
+                />
+                <Button icon={mdiPlus} text="New Target" onClick={openTargetModal} />
+              </Grid>
             </Grid>
             <SelectWrapper
               label="Environment"
