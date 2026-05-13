@@ -304,6 +304,9 @@ func (d *Driver) UpdateUser(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
+		if errors.Is(err, store.ErrLocked) {
+			err = errors.New("Someone else is currently editing users, retry")
+		}
 		return c.JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -361,6 +364,9 @@ func (d *Driver) UpdateMe(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		c.Status(fiber.StatusBadRequest)
+		if errors.Is(err, store.ErrLocked) {
+			err = errors.New("Someone else is currently editing users, retry")
+		}
 		return c.JSON(fiber.Map{
 			"error": err.Error(),
 		})

@@ -20,7 +20,7 @@ func (d *Driver) RunInTxWithLock(ctx context.Context, lockName string, fn func(c
 			key := advisoryLockKey(lockName)
 			var ok bool
 			if err := tx.QueryRowContext(ctx,
-				"SELECT pg_try_advisory_lock(?)", key,
+				"SELECT pg_try_advisory_xact_lock(?)", key,
 			).Scan(&ok); err != nil {
 				return fmt.Errorf("acquire advisory lock: %w", err)
 			}
