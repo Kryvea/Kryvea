@@ -713,11 +713,9 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 		})
 	}
 
-	filename := util.SanitizeFileName(report.Filename())
-
 	c.Status(fiber.StatusOK)
 	c.Set("Content-Type", mimetype.Detect(renderedTemplate).String())
-	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Set("Content-Disposition", util.ContentDispositionAttachment(report.Filename()))
 	return c.SendStream(bytes.NewBuffer(renderedTemplate))
 }
 

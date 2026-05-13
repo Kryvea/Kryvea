@@ -1,13 +1,20 @@
 import { toast } from "react-toastify";
 
 export const curryDownloadReport = toastId => (blob, contentDisposition) => {
-  let filename = "report_export";
+  let filename: string | undefined;
   if (contentDisposition) {
-    const match = contentDisposition.match(/filename=?"(.+?)?"$/);
-    if (match && match[1]) {
-      filename = match[1];
+    const ext = contentDisposition.match(/filename\*\s*=\s*[^']*'[^']*'([^;]+)/i);
+    if (ext) {
+      filename = decodeURIComponent(ext[1].trim());
+    }
+    if (!filename) {
+      const legacy = contentDisposition.match(/filename\s*=\s*"([^"]+)"/i);
+      if (legacy) {
+        filename = legacy[1];
+      }
     }
   }
+  filename ??= "report_export";
 
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");

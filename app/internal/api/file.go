@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -110,7 +111,7 @@ func (d *Driver) GetTemplateFile(c *fiber.Ctx) error {
 
 	c.Status(fiber.StatusOK)
 	c.Set("Content-Type", fileReference.MimeType)
-	c.Set("Content-Disposition", "attachment; filename="+template.Filename)
+	c.Set("Content-Disposition", util.ContentDispositionAttachment(template.Filename))
 	return c.SendStream(bytes.NewReader(fileData))
 }
 
