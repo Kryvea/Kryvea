@@ -15,7 +15,7 @@ type Assessment struct {
 	StartDateTime      time.Time       `json:"start_date_time,omitempty"`
 	EndDateTime        time.Time       `json:"end_date_time,omitempty"`
 	KickoffDateTime    time.Time       `json:"kickoff_date_time,omitempty"`
-	Targets            []Target        `json:"targets,omitempty"`
+	Targets            []Target        `json:"targets"`
 	Status             string          `json:"status,omitempty"`
 	Type               AssessmentType  `json:"type,omitempty"`
 	CVSSVersions       map[string]bool `json:"cvss_versions,omitempty"`
