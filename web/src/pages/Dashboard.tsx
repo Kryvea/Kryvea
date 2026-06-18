@@ -28,7 +28,7 @@ export default function Dashboard() {
       header: "Customer",
       render: assessment => (
         <Link
-          to={`/customers/${assessment.customer.id}/assessments`}
+          to={`/customers/${assessment.customer.id}`}
           onClick={() => setCtxCustomer(assessment.customer)}
         >
           {assessment.customer.name}
@@ -38,7 +38,7 @@ export default function Dashboard() {
     {
       header: "Assessment Name",
       render: assessment => (
-        <Link to={`/customers/${assessment.customer.id}/assessments/${assessment.id}/vulnerabilities`}>
+        <Link to={`/customers/${assessment.customer.id}/${assessment.id}`}>
           {assessment.name}
         </Link>
       ),

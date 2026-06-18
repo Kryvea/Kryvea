@@ -152,34 +152,28 @@ export default function App() {
                 {/* Customers */}
                 <Route path="/customers" element={<Customers />} />
                 <Route path="/customers/new" element={<AddCustomer />} />
-                <Route path="/customers/:customerId" element={<CustomerDetail />} />
+                <Route path="/customers/:customerId" element={<Assessments />} />
+                <Route path="/customers/:customerId/details" element={<CustomerDetail />} />
                 <Route path="/customers/:customerId/targets" element={<Targets />} />
-                <Route path="/customers/:customerId/assessments" element={<Assessments />} />
-                <Route path="/customers/:customerId/assessments/new" element={<AssessmentUpsert />} />
-                <Route path="/customers/:customerId/assessments/:assessmentId" element={<AssessmentUpsert />} />
+                <Route path="/customers/:customerId/new" element={<AssessmentUpsert />} />
 
                 {/* Assessments */}
-                <Route
-                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities"
-                  element={<AssessmentVulnerabilities />}
-                />
-                <Route
-                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/new"
-                  element={<VulnerabilityUpsert />}
-                />
-                <Route
-                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId"
-                  element={<VulnerabilityDetail />}
-                />
-                <Route
-                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId/edit"
-                  element={<VulnerabilityUpsert />}
-                />
+                <Route path="/customers/:customerId/:assessmentId" element={<AssessmentVulnerabilities />} />
+                <Route path="/customers/:customerId/:assessmentId/edit" element={<AssessmentUpsert />} />
+                <Route path="/customers/:customerId/:assessmentId/new" element={<VulnerabilityUpsert />} />
 
                 {/* Vulnerabilities */}
                 <Route path="/vulnerability_search" element={<VulnerabilitySearch />} />
                 <Route
-                  path="/customers/:customerId/assessments/:assessmentId/vulnerabilities/:vulnerabilityId/pocs"
+                  path="/customers/:customerId/:assessmentId/:vulnerabilityId"
+                  element={<VulnerabilityDetail />}
+                />
+                <Route
+                  path="/customers/:customerId/:assessmentId/:vulnerabilityId/edit"
+                  element={<VulnerabilityUpsert />}
+                />
+                <Route
+                  path="/customers/:customerId/:assessmentId/:vulnerabilityId/pocs"
                   element={<PocsUpsert />}
                 />
 

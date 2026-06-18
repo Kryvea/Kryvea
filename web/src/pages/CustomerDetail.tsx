@@ -254,7 +254,7 @@ export default function CustomerDetail() {
             variant="tertiary"
             text="Assessments"
             icon={mdiTabSearch}
-            onClick={() => navigate(`/customers/${ctxCustomer?.id}/assessments`)}
+            onClick={() => navigate(`/customers/${ctxCustomer?.id}`)}
           />
           <Button
             small

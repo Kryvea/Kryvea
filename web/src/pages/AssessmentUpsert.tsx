@@ -190,7 +190,7 @@ export default function AssessmentUpsert() {
         },
         err => {
           toast.error(err.response.data.error);
-          navigate(`/customers/${customerId}/assessments`);
+          navigate(`/customers/${customerId}`);
         }
       );
     }
@@ -305,7 +305,7 @@ export default function AssessmentUpsert() {
 
     apiCall(endpoint, payload, data => {
       toast.success((data as any)?.message);
-      navigate(`/customers/${customerId}/assessments`);
+      navigate(`/customers/${customerId}`);
     });
   };
 

@@ -73,7 +73,7 @@ export default function Customers() {
           onClick={() => {
             setCtxCustomer(customer);
             setCtxSelectedSidebarItemLabel("Assessments");
-            navigate(`${customer.id}/assessments`);
+            navigate(`${customer.id}`);
           }}
         >
           {customer.name}

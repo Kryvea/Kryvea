@@ -125,7 +125,7 @@ export default function Assessments() {
       maxWidth: "24rem",
       render: assessment => (
         <Link
-          to={`/customers/${customerId}/assessments/${assessment.id}/vulnerabilities`}
+          to={`/customers/${customerId}/${assessment.id}`}
           onClick={() => setCtxAssessment(assessment)}
           title={assessment.name}
         >
@@ -183,7 +183,7 @@ export default function Assessments() {
           <Button
             variant="tertiary"
             icon={mdiFileEdit}
-            onClick={() => navigate(`/customers/${customerId}/assessments/${assessment.id}`)}
+            onClick={() => navigate(`/customers/${customerId}/${assessment.id}/edit`)}
             small
             title="Edit assessment"
           />
@@ -281,7 +281,7 @@ export default function Assessments() {
           icon={mdiPlus}
           text="New assessment"
           small
-          onClick={() => navigate(`/customers/${customerId}/assessments/new`)}
+          onClick={() => navigate(`/customers/${customerId}/new`)}
         />
       </PageHeader>
 
