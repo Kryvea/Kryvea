@@ -91,21 +91,21 @@ export default function AssessmentVulnerabilities() {
     ];
     if (ctxAssessment?.cvss_versions["2.0"]) {
       cols.push({
-        header: "CVSSv2.0 Score",
+        header: "CVSSv2.0",
         sortKey: "cvssv2_score",
         render: vulnerability => vulnerability.cvssv2.score,
       });
     }
     if (ctxAssessment?.cvss_versions["3.1"]) {
       cols.push({
-        header: "CVSSv3.1 Score",
+        header: "CVSSv3.1",
         sortKey: "cvssv31_score",
         render: vulnerability => vulnerability.cvssv31.score,
       });
     }
     if (ctxAssessment?.cvss_versions["4.0"]) {
       cols.push({
-        header: "CVSSv4.0 Score",
+        header: "CVSSv4.0",
         sortKey: "cvssv4_score",
         render: vulnerability => vulnerability.cvssv4.score,
       });
@@ -285,6 +285,7 @@ export default function AssessmentVulnerabilities() {
 
       <Grid className="gap-4">
         <Table
+          tableId="assessment-vulnerabilities"
           columns={columns}
           data={vulnerabilities}
           loading={loadingVulnerabilities}

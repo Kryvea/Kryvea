@@ -89,6 +89,7 @@ export default function Logs() {
         </Card>
 
         <Table
+          tableId="logs"
           loading={loadingLogs}
           columns={logColumns}
           data={logs ?? []}

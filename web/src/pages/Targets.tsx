@@ -161,6 +161,7 @@ export default function Targets() {
       </PageHeader>
 
       <Table
+        tableId="targets"
         loading={loadingTargets}
         columns={targetColumns}
         data={groups}

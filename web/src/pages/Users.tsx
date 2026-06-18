@@ -303,6 +303,7 @@ export default function Users() {
 
       {/* Users Table */}
       <Table
+        tableId="users"
         loading={loadingUsers}
         columns={userColumns}
         data={users}

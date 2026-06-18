@@ -127,6 +127,7 @@ export default function Customers() {
       </PageHeader>
 
       <Table
+        tableId="customers"
         loading={loadingCustomers}
         columns={customerColumns}
         data={customers}

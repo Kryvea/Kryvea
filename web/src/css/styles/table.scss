@@ -34,12 +34,14 @@ table tbody tr:hover {
 table td {
   @apply px-4 py-2;
   width: max-content;
+}
 
-  &:empty::after {
-    content: "N/A";
-    font-weight: 100;
-    color: var(--border-primary-highlight);
-  }
+// "N/A" for empty cells. The resizable table wraps content in .truncate-cell, so there the div (not the td) is empty.
+table td:empty::after,
+.resizable-table .truncate-cell:empty::after {
+  content: "N/A";
+  font-weight: 100;
+  color: var(--border-primary-highlight);
 }
 
 table td:has(div:has(.select-wrapper__control)) {
@@ -50,5 +52,49 @@ table td:has(div:has(.select-wrapper__control)) {
 .vulnerability-detail-cvss-table {
   td:empty {
     text-align: center;
+  }
+}
+
+.resizable-table th {
+  position: relative;
+}
+
+// Wraps the header text + sort icon so its natural width can be measured (the resize minimum width).
+.resizable-table .th-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+// Keep the action buttons pinned to the right edge even when the sticky column is wider than its content.
+.resizable-table td[data-buttons-cell]>*>.flex {
+  justify-content: flex-end;
+}
+
+.resizable-table .truncate-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resizable-table .resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  padding: 0 4px;
+  cursor: col-resize;
+
+  &::after {
+    position: absolute;
+    right: 50%;
+    content: " ";
+    height: 100%;
+    width: 1px;
+    background-color: var(--border-primary);
+  }
+
+  &:active::after {
+    border-left: 1px solid var(--border-primary);
+    border-right: 2px solid var(--border-primary);
   }
 }

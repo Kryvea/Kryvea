@@ -133,9 +133,10 @@ export default function Assessments() {
         </Link>
       ),
     },
-    { header: "Type", render: assessment => assessment.type.short },
+    { header: "Type", fitHeader: true, render: assessment => assessment.type.short },
     {
       header: "CVSS Versions",
+      fitHeader: true,
       render: assessment =>
         [
           assessment.cvss_versions["2.0"] ? "2.0" : null,
@@ -145,7 +146,7 @@ export default function Assessments() {
           .filter(Boolean)
           .join(" | "),
     },
-    { header: "Vuln count", render: assessment => assessment.vulnerability_count },
+    { header: "Vuln count", fitHeader: true, render: assessment => assessment.vulnerability_count },
     {
       header: "Start",
       sortValue: assessment => new Date(assessment.start_date_time),
@@ -156,9 +157,10 @@ export default function Assessments() {
       sortValue: assessment => new Date(assessment.end_date_time),
       render: assessment => formatDate(assessment.end_date_time),
     },
-    { header: "Language", render: assessment => assessment.language?.toUpperCase() },
+    { header: "Language", fitHeader: true, render: assessment => assessment.language?.toUpperCase() },
     {
       header: "Status",
+      maxWidth: "12rem",
       render: assessment => (
         <SelectWrapper
           small
@@ -286,6 +288,7 @@ export default function Assessments() {
       </PageHeader>
 
       <Table
+        tableId="assessments"
         loading={loadingAssessments}
         columns={assessmentColumns}
         data={assessments ?? []}

@@ -212,6 +212,7 @@ export default function Categories() {
 
       <div>
         <Table
+          tableId="categories"
           loading={loadingCategories}
           columns={categoryColumns}
           data={categories}

@@ -63,6 +63,7 @@ export default function Dashboard() {
       <div>
         <PageHeader icon={mdiDotsCircle} title="Ongoing Assessments" />
         <Table
+          tableId="dashboard-ongoing"
           loading={loadingAssessments}
           columns={assessmentColumns}
           data={assessments.filter(a => a.status !== "Completed")}
@@ -73,6 +74,7 @@ export default function Dashboard() {
       <div>
         <PageHeader icon={mdiHistory} title="Completed Assessments" />
         <Table
+          tableId="dashboard-completed"
           loading={loadingAssessments}
           columns={assessmentColumns}
           data={assessments.filter(a => a.status === "Completed")}

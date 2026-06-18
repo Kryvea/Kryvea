@@ -213,6 +213,7 @@ export default function Templates() {
       </PageHeader>
 
       <Table
+        tableId="templates"
         loading={loadingAssessments}
         columns={templateColumns}
         data={uploadedTemplates}

@@ -368,6 +368,7 @@ export default function CustomerDetail() {
             </Buttons>
             <Divider />
             <Table
+              tableId="customer-templates"
               loading={loadingCustomerTemplates}
               columns={customerTemplateColumns}
               data={customerTemplates}

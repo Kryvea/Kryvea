@@ -1,5 +1,14 @@
 import { mdiChevronDown, mdiChevronUp, mdiClose } from "@mdi/js";
-import { ReactNode, isValidElement, useMemo, useState } from "react";
+import {
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+  isValidElement,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Card from "./Card";
 import Flex from "./Flex";
 import Icon from "./Icon";
@@ -16,6 +25,8 @@ type DataColumn<Row> = {
   sortable?: boolean;
   sortValue?: (row: Row) => string | number | Date;
   maxWidth?: string;
+  /** Seed this column at its header width instead of its content width (still resizable afterwards). */
+  fitHeader?: boolean;
 };
 
 type ActionsColumn<Row> = {
@@ -41,20 +52,55 @@ interface PaginationProps {
 
 type RowWithId = { id: string | number };
 
-type TableProps<Row extends RowWithId> = {
+type BaseTableProps<Row extends RowWithId> = {
   columns: Column<Row>[];
   data: Row[];
   loading?: boolean;
   rowKey?: (row: Row, index: number) => string | number;
   perPage?: number;
-  search?: SearchProps;
-  pagination?: PaginationProps;
-  sort?: SortState;
-  onSortChange?: (next: SortState | undefined) => void;
+  /** Stable id used to persist per-column widths in localStorage. Omit to keep widths only for the session. */
+  tableId?: string;
+};
+
+// Server-driven mode: the parent owns search, sorting and pagination.
+type ControlledTableProps = {
+  search: SearchProps;
+  pagination: PaginationProps;
+  sort: SortState | undefined;
+  onSortChange: (next: SortState | undefined) => void;
+  defaultSort?: never;
+};
+
+// Client-driven mode: search, sorting and pagination are handled internally.
+type UncontrolledTableProps = {
+  search?: undefined;
+  pagination?: undefined;
+  sort?: undefined;
+  onSortChange?: undefined;
   defaultSort?: SortState;
 };
 
+type TableProps<Row extends RowWithId> = BaseTableProps<Row> & (ControlledTableProps | UncontrolledTableProps);
+
 const PAGE_FLOOR = 1;
+const WIDTHS_PREFIX = "kryvea:table-widths:";
+const MIN_COLUMN_WIDTH = 48;
+const ACTIONS_KEY = "__actions__";
+
+// Column identity for width state/persistence. Assumes data-column headers are unique within a table (true for every
+// current table); two data columns sharing a header would also share a width.
+const columnKey = <Row,>(column: Column<Row>) => (column.kind === "actions" ? ACTIONS_KEY : column.header);
+
+// Width needed to show the header label (text + sort icon) without clipping, including the cell padding. Used both
+// as the resize floor and as the initial width for `fitHeader` columns.
+function headerContentWidth(th: HTMLElement): number {
+  const label = th.querySelector<HTMLElement>(".th-label");
+  if (!label) {
+    return Math.round(th.getBoundingClientRect().width);
+  }
+  const style = getComputedStyle(th);
+  return Math.ceil(label.scrollWidth + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight));
+}
 
 function extractText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") {
@@ -72,14 +118,253 @@ function extractText(node: ReactNode): string {
   return "";
 }
 
+function compareValues(a: string | number | Date, b: string | number | Date): number {
+  if (typeof a === "string" && typeof b === "string") {
+    return a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
+  }
+  if (a < b) {
+    return -1;
+  }
+  return a > b ? 1 : 0;
+}
+
 function cycleSort(prev: SortState | undefined, key: string): SortState | undefined {
   if (!prev || prev.key !== key) {
     return { key, order: "asc" };
   }
-  if (prev.order === "asc") {
-    return { key, order: "desc" };
+  return prev.order === "asc" ? { key, order: "desc" } : undefined;
+}
+
+function loadColumnWidths(tableId?: string): Record<string, number> {
+  if (!tableId) {
+    return {};
   }
-  return undefined;
+  try {
+    const raw = localStorage.getItem(WIDTHS_PREFIX + tableId);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveColumnWidths(tableId: string | undefined, widths: Record<string, number>) {
+  if (!tableId) {
+    return;
+  }
+  try {
+    localStorage.setItem(WIDTHS_PREFIX + tableId, JSON.stringify(widths));
+  } catch {
+    /* ignore quota / serialization errors */
+  }
+}
+
+// Controlled-or-internal state: uses the controlled value/onChange when provided, otherwise local state.
+function useControllableState<T>(
+  isControlled: boolean,
+  controlledValue: T,
+  onControlledChange: ((value: T) => void) | undefined,
+  initial: T
+): [T, (value: T) => void] {
+  const [internal, setInternal] = useState(initial);
+  const setValue = useCallback(
+    (next: T) => {
+      onControlledChange?.(next);
+      if (!isControlled) {
+        setInternal(next);
+      }
+    },
+    [isControlled, onControlledChange]
+  );
+  return [isControlled ? controlledValue : internal, setValue];
+}
+
+// Client-side search / sort / pagination. In server mode the data is returned untouched (the parent already did it).
+function useTableData<Row>(params: {
+  columns: Column<Row>[];
+  data: Row[];
+  serverMode: boolean;
+  query: string;
+  sort: SortState | undefined;
+  page: number;
+  perPage: number;
+  totalPages?: number;
+}) {
+  const { columns, data, serverMode, query, sort, page, perPage, totalPages } = params;
+
+  const filteredData = useMemo(() => {
+    if (serverMode || !query) {
+      return data;
+    }
+    const q = query.toLowerCase();
+    return data.filter(row =>
+      columns.some(column => column.kind !== "actions" && extractText(column.render(row)).toLowerCase().includes(q))
+    );
+  }, [serverMode, query, data, columns]);
+
+  const sortedData = useMemo(() => {
+    if (serverMode || !sort) {
+      return filteredData;
+    }
+    const column = columns.find(c => c.kind !== "actions" && (c.sortKey ?? c.header) === sort.key) as
+      | DataColumn<Row>
+      | undefined;
+    if (!column) {
+      return filteredData;
+    }
+    const valueOf = column.sortValue ?? ((row: Row) => extractText(column.render(row)));
+    const direction = sort.order === "asc" ? 1 : -1;
+    // Compute each sort key once (Schwartzian transform) rather than re-deriving it on every comparison.
+    return filteredData
+      .map(row => ({ row, sortValue: valueOf(row) }))
+      .sort((a, b) => compareValues(a.sortValue, b.sortValue) * direction)
+      .map(entry => entry.row);
+  }, [serverMode, filteredData, sort, columns]);
+
+  // Slicing is separate from sorting so paging through results doesn't re-sort the whole dataset.
+  const visibleData = useMemo(() => {
+    if (serverMode) {
+      return sortedData;
+    }
+    return sortedData.slice(perPage * (page - PAGE_FLOOR), perPage * page);
+  }, [serverMode, sortedData, page, perPage]);
+
+  const numPages = useMemo(() => {
+    if (serverMode) {
+      return totalPages ?? 0;
+    }
+    const pages = Math.ceil(filteredData.length / perPage);
+    return Number.isNaN(pages) ? 0 : pages;
+  }, [serverMode, totalPages, filteredData.length, perPage]);
+
+  return { filteredData, visibleData, numPages };
+}
+
+// Column widths with drag-to-resize and localStorage persistence. Columns are seeded with their natural width on the
+// first layout, after which the table uses table-layout: fixed so the widths become authoritative.
+function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, ready?: boolean) {
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => loadColumnWidths(tableId));
+  const headerRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
+  const refSetters = useRef<Record<string, (el: HTMLTableCellElement | null) => void>>({});
+  const draggingRef = useRef(false);
+
+  // Seed missing widths from the natural layout, but only once real rows are present: measuring an empty body (still
+  // loading, or no results yet) would size the columns from the headers alone, ignoring maxWidth / body content.
+  const colSignature = columns.map(columnKey).join("|");
+  useLayoutEffect(() => {
+    if (!ready) {
+      return;
+    }
+    setColumnWidths(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const column of columns) {
+        const key = columnKey(column);
+        const el = headerRefs.current[key];
+        if (next[key] == null && el) {
+          next[key] =
+            column.kind !== "actions" && column.fitHeader
+              ? headerContentWidth(el)
+              : Math.round(el.getBoundingClientRect().width);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colSignature, ready]);
+
+  const allWidthsKnown = columns.every(column => columnWidths[columnKey(column)] != null);
+  const totalWidth = allWidthsKnown
+    ? columns.reduce((sum, column) => sum + columnWidths[columnKey(column)], 0)
+    : undefined;
+
+  // Stable ref callback per column key, so the header refs aren't detached and re-attached on every render.
+  const setHeaderRef = (key: string) => {
+    if (!refSetters.current[key]) {
+      refSetters.current[key] = el => {
+        headerRefs.current[key] = el;
+      };
+    }
+    return refSetters.current[key];
+  };
+
+  const startResize = (event: ReactMouseEvent, key: string) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const th = (event.currentTarget as HTMLElement).parentElement;
+    // Start from the actually rendered width (it may differ from the stored one when the table stretches to fill).
+    const startWidth = th?.getBoundingClientRect().width ?? columnWidths[key] ?? MIN_COLUMN_WIDTH;
+    // A column can't shrink below its header content, otherwise the header would overlap the next column.
+    const minWidth = Math.max(MIN_COLUMN_WIDTH, th ? headerContentWidth(th) : MIN_COLUMN_WIDTH);
+    draggingRef.current = false;
+
+    const onMove = (moveEvent: MouseEvent) => {
+      if (moveEvent.clientX !== startX) {
+        draggingRef.current = true;
+      }
+      setColumnWidths(prev => ({
+        ...prev,
+        [key]: Math.max(minWidth, Math.round(startWidth + moveEvent.clientX - startX)),
+      }));
+    };
+
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      setColumnWidths(prev => {
+        saveColumnWidths(tableId, prev);
+        return prev;
+      });
+      // Let the click that follows mouseup read the drag flag (to skip sorting) before it is reset.
+      setTimeout(() => {
+        draggingRef.current = false;
+      }, 0);
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  return { columnWidths, allWidthsKnown, totalWidth, setHeaderRef, startResize, isResizing: () => draggingRef.current };
+}
+
+// Cell whose content is clipped to the column width; the tooltip is shown only when the text is actually truncated.
+// Once the table switches to table-layout: fixed the cell width is authoritative and the content fills it; during
+// the initial measuring pass (auto layout) `maxWidth` caps the column so it doesn't seed an oversized width.
+function TruncatingCell({
+  content,
+  fixed,
+  maxWidth,
+  columnWidth,
+}: {
+  content: ReactNode;
+  fixed: boolean;
+  maxWidth?: string;
+  columnWidth?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [truncated, setTruncated] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    setTruncated(!!el && el.scrollWidth > el.clientWidth);
+  }, [content, fixed, maxWidth, columnWidth]);
+  return (
+    <td className="text-nowrap">
+      <div
+        ref={ref}
+        className="truncate-cell"
+        // During the measuring pass `maxWidth` sets the column's width, so it seeds at exactly that size.
+        style={!fixed && maxWidth != null ? { width: maxWidth } : undefined}
+        title={truncated ? extractText(content) || undefined : undefined}
+      >
+        {content}
+      </div>
+    </td>
+  );
 }
 
 export default function Table<Row extends RowWithId>({
@@ -87,131 +372,71 @@ export default function Table<Row extends RowWithId>({
   data,
   loading,
   perPage: perPageInitial = 5,
+  rowKey,
+  tableId,
   search,
   pagination,
   sort,
   onSortChange,
   defaultSort,
-  rowKey,
 }: TableProps<Row>) {
-  const [filterText, setFilterText] = useState("");
-  const [clientPage, setClientPage] = useState(PAGE_FLOOR);
-  const [clientPerPage, setClientPerPage] = useState(perPageInitial);
-  const [clientSort, setClientSort] = useState<SortState | undefined>(defaultSort);
+  const serverMode = pagination?.totalRows !== undefined;
 
-  const isServerMode = pagination?.totalRows !== undefined;
-  const effectiveSearch = search?.value ?? filterText;
-  const effectivePage = pagination?.page ?? clientPage;
-  const effectivePerPage = pagination?.perPage ?? clientPerPage;
-  const effectiveSort = sort ?? clientSort;
+  const [query, setQuery] = useControllableState(!!search, search?.value ?? "", search?.onChange, "");
+  const [page, setPage] = useControllableState(
+    !!pagination,
+    pagination?.page ?? PAGE_FLOOR,
+    pagination?.onPageChange,
+    PAGE_FLOOR
+  );
+  const [perPage, setPerPage] = useControllableState(
+    !!pagination,
+    pagination?.perPage ?? perPageInitial,
+    pagination?.onPerPageChange,
+    perPageInitial
+  );
+  const [activeSort, setActiveSort] = useControllableState(!!onSortChange, sort, onSortChange, defaultSort);
 
-  const sortKeyOf = (column: DataColumn<Row>) =>
-    isServerMode ? column.sortKey : (column.sortKey ?? column.header);
-
-  const isSortable = (column: DataColumn<Row>) =>
-    isServerMode ? !!column.sortKey : column.sortable !== false;
-
-  const sortColumn = useMemo(() => {
-    if (!effectiveSort) {
-      return undefined;
-    }
-    return columns.find(column => {
-      if (column.kind === "actions") {
-        return false;
-      }
-      return sortKeyOf(column) === effectiveSort.key;
-    }) as DataColumn<Row> | undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, effectiveSort, isServerMode]);
-
-  const filteredData = useMemo(() => {
-    if (isServerMode) {
-      return data;
-    }
-    const query = effectiveSearch.toLowerCase();
-    if (!query) {
-      return data;
-    }
-    return data.filter(row =>
-      columns.some(column => column.kind !== "actions" && extractText(column.render(row)).toLowerCase().includes(query))
-    );
-  }, [data, columns, effectiveSearch, isServerMode]);
-
-  const sortedData = useMemo(() => {
-    if (isServerMode) {
-      return filteredData;
-    }
-    if (!effectiveSort || !sortColumn) {
-      return filteredData;
-    }
-    const direction = effectiveSort.order === "asc" ? 1 : -1;
-    const getValue = sortColumn.sortValue ?? ((row: Row) => extractText(sortColumn.render(row)));
-    return [...filteredData].sort((a, b) => {
-      const valueA = getValue(a);
-      const valueB = getValue(b);
-      if (typeof valueA === "string" && typeof valueB === "string") {
-        return valueA.localeCompare(valueB, undefined, { sensitivity: "base", numeric: true }) * direction;
-      }
-      if (valueA === valueB) return 0;
-      return valueA > valueB ? direction : -direction;
-    });
-  }, [filteredData, effectiveSort, sortColumn, isServerMode]);
-
-  const visibleData = useMemo(() => {
-    if (isServerMode) {
-      return sortedData;
-    }
-    return sortedData.slice(effectivePerPage * (effectivePage - PAGE_FLOOR), effectivePerPage * effectivePage);
-  }, [sortedData, effectivePage, effectivePerPage, isServerMode]);
-
-  const numPages = useMemo(() => {
-    if (isServerMode) {
-      return pagination!.totalPages ?? 0;
-    }
-    const totalPages = Math.ceil(filteredData.length / effectivePerPage);
-    return isNaN(totalPages) ? 0 : totalPages;
-  }, [isServerMode, pagination, filteredData.length, effectivePerPage]);
+  const { filteredData, visibleData, numPages } = useTableData({
+    columns,
+    data,
+    serverMode,
+    query,
+    sort: activeSort,
+    page,
+    perPage,
+    totalPages: pagination?.totalPages,
+  });
+  // Real rows are rendered: only then can the columns be measured for their authoritative widths.
+  const hasRows = !loading && visibleData.length > 0;
+  const resize = useResizableColumns(columns, tableId, hasRows);
 
   const pagesList = useMemo(() => Array.from({ length: numPages }, (_, i) => i + PAGE_FLOOR), [numPages]);
 
-  const handleSearchChange = (v: string) => {
-    if (search) {
-      search.onChange(v);
-      return;
+  const sortKeyOf = (column: DataColumn<Row>) => (serverMode ? column.sortKey : (column.sortKey ?? column.header));
+  const isSortable = (column: DataColumn<Row>) => (serverMode ? !!column.sortKey : column.sortable !== false);
+
+  const handleSearch = (value: string) => {
+    // Controlled search resets the page through the parent; only reset it ourselves in client mode.
+    if (!search) {
+      setPage(PAGE_FLOOR);
     }
-    setClientPage(PAGE_FLOOR);
-    setFilterText(v);
+    setQuery(value);
+  };
+
+  const handlePerPage = (value: number) => {
+    setPerPage(value);
+    setPage(PAGE_FLOOR);
   };
 
   const handleHeaderClick = (column: DataColumn<Row>) => {
+    if (resize.isResizing()) {
+      return;
+    }
     const key = sortKeyOf(column);
-    if (!key) return;
-    const next = cycleSort(effectiveSort, key);
-    if (onSortChange) {
-      onSortChange(next);
-      return;
+    if (key) {
+      setActiveSort(cycleSort(activeSort, key));
     }
-    setClientSort(next);
-  };
-
-  const indicatorKey = (column: DataColumn<Row>) => sortKeyOf(column);
-
-  const setCurrentPage = (p: number) => {
-    if (pagination) {
-      pagination.onPageChange(p);
-      return;
-    }
-    setClientPage(p);
-  };
-
-  const setPerPage = (n: number) => {
-    if (pagination) {
-      pagination.onPerPageChange(n);
-      pagination.onPageChange(PAGE_FLOOR);
-      return;
-    }
-    setClientPage(PAGE_FLOOR);
-    setClientPerPage(n);
   };
 
   return (
@@ -221,41 +446,74 @@ export default function Table<Row extends RowWithId>({
           className="w-full rounded-t-2xl bg-transparent focus:border-transparent"
           placeholder="Search"
           type="text"
-          value={effectiveSearch}
-          onChange={e => handleSearchChange(e.target.value)}
+          value={query}
+          onChange={e => handleSearch(e.target.value)}
         />
-        {effectiveSearch !== "" && (
-          <span onClick={() => handleSearchChange("")}>
+        {query !== "" && (
+          <span onClick={() => handleSearch("")}>
             <Icon className="text-[color:--text-secondary] hover:opacity-50" path={mdiClose} size={18} />
           </span>
         )}
       </Flex>
       <div className="grid gap-2">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table
+            className="resizable-table"
+            style={
+              resize.allWidthsKnown
+                ? // Authoritative widths: at least fill the container (so the sticky column reaches the right edge),
+                  // and grow past it — scrolling — when the columns are wider than the viewport.
+                  { tableLayout: "fixed", width: resize.totalWidth, minWidth: "100%" }
+                : hasRows
+                  ? // Measuring pass: size to the natural content so columns seed at their real width, not squeezed.
+                    { tableLayout: "auto", width: "max-content" }
+                  : // Empty / loading: nothing to measure yet, just fill the container (no gap on the right).
+                    { tableLayout: "auto", width: "100%" }
+            }
+          >
+            <colgroup>
+              {columns.map((column, idx) => {
+                const width = resize.columnWidths[columnKey(column)];
+                return <col key={`col-${idx}`} style={width != null ? { width } : undefined} />;
+              })}
+            </colgroup>
             {columns.length > 0 && (
               <thead>
                 <tr>
                   {columns.map((column, idx) => {
                     if (column.kind === "actions") {
-                      return <th key={`h-${idx}`} style={{ width: "1%", whiteSpace: "nowrap" }} />;
+                      return (
+                        <th
+                          key={`h-${idx}`}
+                          ref={resize.setHeaderRef(ACTIONS_KEY)}
+                          style={{ width: "1%", whiteSpace: "nowrap" }}
+                        />
+                      );
                     }
                     const sortable = isSortable(column);
-                    const isCurrent = sortable && effectiveSort?.key === indicatorKey(column);
+                    const isCurrent = sortable && activeSort?.key === sortKeyOf(column);
                     return (
                       <th
                         key={`h-${idx}`}
+                        ref={resize.setHeaderRef(column.header)}
                         className={`align-middle ${sortable ? "cursor-pointer hover:opacity-60" : ""}`}
                         onClick={sortable ? () => handleHeaderClick(column) : undefined}
                       >
-                        {column.header}
-                        {sortable && (
-                          <Icon
-                            className={isCurrent ? "" : "opacity-0"}
-                            path={effectiveSort?.order === "asc" ? mdiChevronUp : mdiChevronDown}
-                            viewBox="0 0 18 18"
-                          />
-                        )}
+                        <span className="th-label">
+                          {column.header}
+                          {sortable && (
+                            <Icon
+                              className={isCurrent ? "" : "opacity-0"}
+                              path={activeSort?.order === "asc" ? mdiChevronUp : mdiChevronDown}
+                              viewBox="0 0 18 18"
+                            />
+                          )}
+                        </span>
+                        <span
+                          className="resize-handle"
+                          onMouseDown={e => resize.startResize(e, column.header)}
+                          onClick={e => e.stopPropagation()}
+                        />
                       </th>
                     );
                   })}
@@ -264,7 +522,7 @@ export default function Table<Row extends RowWithId>({
             )}
             <tbody>
               {loading ? (
-                Array.from({ length: Math.min(effectivePerPage, 5) }).map((_, i) => (
+                Array.from({ length: Math.min(perPage, 5) }).map((_, i) => (
                   <tr key={`s-${i}`}>
                     {columns.map((_, j) => (
                       <td key={`s-${i}-${j}`}>
@@ -293,29 +551,14 @@ export default function Table<Row extends RowWithId>({
                           </td>
                         );
                       }
-                      const content = column.render(row);
-                      if (column.maxWidth) {
-                        const text = extractText(content);
-                        return (
-                          <td key={j} className="text-nowrap">
-                            <div
-                              style={{
-                                maxWidth: column.maxWidth,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                              title={text || undefined}
-                            >
-                              {content}
-                            </div>
-                          </td>
-                        );
-                      }
                       return (
-                        <td key={j} className="text-nowrap">
-                          {content}
-                        </td>
+                        <TruncatingCell
+                          key={j}
+                          content={column.render(row)}
+                          fixed={resize.allWidthsKnown}
+                          maxWidth={column.maxWidth}
+                          columnWidth={resize.columnWidths[column.header]}
+                        />
                       );
                     })}
                   </tr>
@@ -326,13 +569,13 @@ export default function Table<Row extends RowWithId>({
         </div>
         <div>
           <Paginator
-            currentPage={effectivePage}
-            perPage={effectivePerPage}
+            currentPage={page}
+            perPage={perPage}
             pagesList={pagesList}
             filteredData={filteredData}
             backendTotalRows={pagination?.totalRows}
-            setCurrentPage={setCurrentPage}
-            setPerPage={setPerPage}
+            setCurrentPage={setPage}
+            setPerPage={handlePerPage}
           />
         </div>
         <div /> {/* Empty element just to even the last element gap */}
@@ -340,4 +583,3 @@ export default function Table<Row extends RowWithId>({
     </Card>
   );
 }
-
