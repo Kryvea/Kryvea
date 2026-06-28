@@ -59,6 +59,9 @@ export default function AssessmentVulnerabilities() {
   }, []);
 
   useEffect(() => {
+    if (!t.ready) {
+      return;
+    }
     const paginationLoadingsTimeout = setTimeout(() => setLoadingVulnerabilities(true), 750);
     getData<{ total_pages: number; total_documents: number; data: Vulnerability[] }>(
       `/api/assessments/${assessmentId}/vulnerabilities${search}`,
@@ -73,7 +76,7 @@ export default function AssessmentVulnerabilities() {
         setLoadingVulnerabilities(false);
       }
     );
-  }, [search, refreshNonce]);
+  }, [search, refreshNonce, t.ready]);
 
   const columns = useMemo((): Column<Vulnerability>[] => {
     const cols: Column<Vulnerability>[] = [

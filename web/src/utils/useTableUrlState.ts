@@ -1,5 +1,5 @@
 import { parseAsInteger, parseAsString, parseAsStringEnum, useQueryStates } from "nuqs";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type SortState = { key: string; order: "asc" | "desc" };
 
@@ -35,6 +35,8 @@ export function useTableUrlState({ namespace = "", defaultLimit = 25, defaultSor
   );
 
   const [params, setParams] = useQueryStates(parsers, tableQueryOptions);
+  // False until the default params are written into the URL; pages that fetch on the URL should wait for it.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const next: Record<string, string | number> = {
@@ -47,6 +49,7 @@ export function useTableUrlState({ namespace = "", defaultLimit = 25, defaultSor
       next[keys.sort_order] = defaultSort.order;
     }
     setParams(next, { history: "replace" });
+    setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -57,6 +60,7 @@ export function useTableUrlState({ namespace = "", defaultLimit = 25, defaultSor
   const perPage = (params[keys.limit] as number | null) ?? defaultLimit;
 
   return {
+    ready,
     search: {
       value: queryValue,
       onChange: (q: string) => setParams({ [keys.query]: q, [keys.page]: 1 }),

@@ -4,6 +4,7 @@ import {
   ReactNode,
   isValidElement,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -62,7 +63,6 @@ type BaseTableProps<Row extends RowWithId> = {
   tableId?: string;
 };
 
-// Server-driven mode: the parent owns search, sorting and pagination.
 type ControlledTableProps = {
   search: SearchProps;
   pagination: PaginationProps;
@@ -71,7 +71,6 @@ type ControlledTableProps = {
   defaultSort?: never;
 };
 
-// Client-driven mode: search, sorting and pagination are handled internally.
 type UncontrolledTableProps = {
   search?: undefined;
   pagination?: undefined;
@@ -87,12 +86,9 @@ const WIDTHS_PREFIX = "kryvea:table-widths:";
 const MIN_COLUMN_WIDTH = 48;
 const ACTIONS_KEY = "__actions__";
 
-// Column identity for width state/persistence. Assumes data-column headers are unique within a table (true for every
-// current table); two data columns sharing a header would also share a width.
+// Width persistence keys columns by header, so data-column headers must be unique within a table.
 const columnKey = <Row,>(column: Column<Row>) => (column.kind === "actions" ? ACTIONS_KEY : column.header);
 
-// Width needed to show the header label (text + sort icon) without clipping, including the cell padding. Used both
-// as the resize floor and as the initial width for `fitHeader` columns.
 function headerContentWidth(th: HTMLElement): number {
   const label = th.querySelector<HTMLElement>(".th-label");
   if (!label) {
@@ -140,8 +136,15 @@ function loadColumnWidths(tableId?: string): Record<string, number> {
     return {};
   }
   try {
-    const raw = localStorage.getItem(WIDTHS_PREFIX + tableId);
-    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    const parsed = JSON.parse(localStorage.getItem(WIDTHS_PREFIX + tableId) ?? "{}") as Record<string, unknown>;
+    const widths: Record<string, number> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      // Drop anything that isn't a usable width; a NaN/legacy entry would otherwise collapse the whole table.
+      if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+        widths[key] = value;
+      }
+    }
+    return widths;
   } catch {
     return {};
   }
@@ -158,7 +161,6 @@ function saveColumnWidths(tableId: string | undefined, widths: Record<string, nu
   }
 }
 
-// Controlled-or-internal state: uses the controlled value/onChange when provided, otherwise local state.
 function useControllableState<T>(
   isControlled: boolean,
   controlledValue: T,
@@ -178,7 +180,6 @@ function useControllableState<T>(
   return [isControlled ? controlledValue : internal, setValue];
 }
 
-// Client-side search / sort / pagination. In server mode the data is returned untouched (the parent already did it).
 function useTableData<Row>(params: {
   columns: Column<Row>[];
   data: Row[];
@@ -239,22 +240,38 @@ function useTableData<Row>(params: {
   return { filteredData, visibleData, numPages };
 }
 
-// Column widths with drag-to-resize and localStorage persistence. Columns are seeded with their natural width on the
-// first layout, after which the table uses table-layout: fixed so the widths become authoritative.
 function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, ready?: boolean) {
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => loadColumnWidths(tableId));
+  const [baseWidths, setBaseWidths] = useState<Record<string, number>>(() => loadColumnWidths(tableId));
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const headerRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const refSetters = useRef<Record<string, (el: HTMLTableCellElement | null) => void>>({});
   const draggingRef = useRef(false);
+  const endDragRef = useRef<(() => void) | null>(null);
 
-  // Seed missing widths from the natural layout, but only once real rows are present: measuring an empty body (still
-  // loading, or no results yet) would size the columns from the headers alone, ignoring maxWidth / body content.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) {
+      return;
+    }
+    const measure = () => setContainerWidth(el.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Unmounting mid-drag would otherwise leave the document listeners and body styles in place.
+  useEffect(() => () => endDragRef.current?.(), []);
+
+  // Seed widths only once real rows are present: an empty body would size columns from the headers alone.
   const colSignature = columns.map(columnKey).join("|");
   useLayoutEffect(() => {
     if (!ready) {
       return;
     }
-    setColumnWidths(prev => {
+    setBaseWidths(prev => {
       const next = { ...prev };
       let changed = false;
       for (const column of columns) {
@@ -273,7 +290,30 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colSignature, ready]);
 
-  const allWidthsKnown = columns.every(column => columnWidths[columnKey(column)] != null);
+  const allWidthsKnown = columns.every(column => baseWidths[columnKey(column)] != null);
+
+  // Leftover space is spread across data columns proportionally to their width (AG Grid "size columns to fit").
+  // Integer widths only, so 1px borders never land on a fractional edge; the last data column absorbs the rounding.
+  const columnWidths = useMemo(() => {
+    if (!allWidthsKnown || dragging) {
+      return baseWidths;
+    }
+    const dataKeys = columns.filter(column => column.kind !== "actions").map(columnKey);
+    const sumAll = columns.reduce((sum, column) => sum + baseWidths[columnKey(column)], 0);
+    const sumData = dataKeys.reduce((sum, key) => sum + baseWidths[key], 0);
+    const targetData = containerWidth - (sumAll - sumData);
+    if (containerWidth <= sumAll || sumData <= 0 || dataKeys.length === 0) {
+      return baseWidths;
+    }
+    const next = { ...baseWidths };
+    let used = 0;
+    dataKeys.forEach((key, index) => {
+      next[key] = index === dataKeys.length - 1 ? targetData - used : Math.round(targetData * (baseWidths[key] / sumData));
+      used += next[key];
+    });
+    return next;
+  }, [allWidthsKnown, dragging, columns, baseWidths, containerWidth]);
+
   const totalWidth = allWidthsKnown
     ? columns.reduce((sum, column) => sum + columnWidths[columnKey(column)], 0)
     : undefined;
@@ -290,10 +330,22 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
 
   const startResize = (event: ReactMouseEvent, key: string) => {
     event.preventDefault();
+    // Freeze every column at its rendered (post-fill) width so entering drag-mode doesn't jump the layout.
+    setBaseWidths(prev => {
+      const next = { ...prev };
+      for (const column of columns) {
+        const key = columnKey(column);
+        const el = headerRefs.current[key];
+        if (el) {
+          next[key] = Math.round(el.getBoundingClientRect().width);
+        }
+      }
+      return next;
+    });
+    setDragging(true);
     const startX = event.clientX;
     const th = (event.currentTarget as HTMLElement).parentElement;
-    // Start from the actually rendered width (it may differ from the stored one when the table stretches to fill).
-    const startWidth = th?.getBoundingClientRect().width ?? columnWidths[key] ?? MIN_COLUMN_WIDTH;
+    const startWidth = th ? Math.round(th.getBoundingClientRect().width) : MIN_COLUMN_WIDTH;
     // A column can't shrink below its header content, otherwise the header would overlap the next column.
     const minWidth = Math.max(MIN_COLUMN_WIDTH, th ? headerContentWidth(th) : MIN_COLUMN_WIDTH);
     draggingRef.current = false;
@@ -302,18 +354,24 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
       if (moveEvent.clientX !== startX) {
         draggingRef.current = true;
       }
-      setColumnWidths(prev => ({
+      setBaseWidths(prev => ({
         ...prev,
         [key]: Math.max(minWidth, Math.round(startWidth + moveEvent.clientX - startX)),
       }));
     };
 
-    const onUp = () => {
+    const cleanup = () => {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
-      setColumnWidths(prev => {
+      endDragRef.current = null;
+    };
+
+    const onUp = () => {
+      cleanup();
+      setDragging(false);
+      setBaseWidths(prev => {
         saveColumnWidths(tableId, prev);
         return prev;
       });
@@ -323,18 +381,25 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
       }, 0);
     };
 
+    endDragRef.current = cleanup;
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   };
 
-  return { columnWidths, allWidthsKnown, totalWidth, setHeaderRef, startResize, isResizing: () => draggingRef.current };
+  return {
+    columnWidths,
+    allWidthsKnown,
+    totalWidth,
+    containerRef,
+    setHeaderRef,
+    startResize,
+    isResizing: () => draggingRef.current,
+  };
 }
 
-// Cell whose content is clipped to the column width; the tooltip is shown only when the text is actually truncated.
-// Once the table switches to table-layout: fixed the cell width is authoritative and the content fills it; during
-// the initial measuring pass (auto layout) `maxWidth` caps the column so it doesn't seed an oversized width.
+// Clipped to the column width; the tooltip is shown only when the text is actually truncated.
 function TruncatingCell({
   content,
   fixed,
@@ -407,7 +472,6 @@ export default function Table<Row extends RowWithId>({
     perPage,
     totalPages: pagination?.totalPages,
   });
-  // Real rows are rendered: only then can the columns be measured for their authoritative widths.
   const hasRows = !loading && visibleData.length > 0;
   const resize = useResizableColumns(columns, tableId, hasRows);
 
@@ -456,18 +520,17 @@ export default function Table<Row extends RowWithId>({
         )}
       </Flex>
       <div className="grid gap-2">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={resize.containerRef}>
           <table
             className="resizable-table"
             style={
               resize.allWidthsKnown
-                ? // Authoritative widths: at least fill the container (so the sticky column reaches the right edge),
-                  // and grow past it — scrolling — when the columns are wider than the viewport.
+                ? // Fixed layout: columnWidths fill the container (min-width 100%) or overflow it; width matches their sum.
                   { tableLayout: "fixed", width: resize.totalWidth, minWidth: "100%" }
                 : hasRows
                   ? // Measuring pass: size to the natural content so columns seed at their real width, not squeezed.
                     { tableLayout: "auto", width: "max-content" }
-                  : // Empty / loading: nothing to measure yet, just fill the container (no gap on the right).
+                  : // Empty / loading: nothing to measure yet, just fill the container.
                     { tableLayout: "auto", width: "100%" }
             }
           >
