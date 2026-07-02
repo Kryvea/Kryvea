@@ -1,5 +1,6 @@
 import { parseAsInteger, parseAsString, parseAsStringEnum, useQueryStates } from "nuqs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
+import { useLocation } from "react-router";
 
 type SortState = { key: string; order: "asc" | "desc" };
 
@@ -35,8 +36,7 @@ export function useTableUrlState({ namespace = "", defaultLimit = 25, defaultSor
   );
 
   const [params, setParams] = useQueryStates(parsers, tableQueryOptions);
-  // False until the default params are written into the URL; pages that fetch on the URL should wait for it.
-  const [ready, setReady] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const next: Record<string, string | number> = {
@@ -49,9 +49,11 @@ export function useTableUrlState({ namespace = "", defaultLimit = 25, defaultSor
       next[keys.sort_order] = defaultSort.order;
     }
     setParams(next, { history: "replace" });
-    setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Derived from the same location the page fetches on, so the fetch never fires against the still-bare URL.
+  const ready = new URLSearchParams(location.search).has(keys.limit);
 
   const queryValue = (params[keys.query] as string | null) ?? "";
   const sortField = params[keys.sort_field] as string | null;
@@ -74,6 +76,14 @@ export function useTableUrlState({ namespace = "", defaultLimit = 25, defaultSor
       onPageChange: (p: number) => setParams({ [keys.page]: p }),
       onPerPageChange: (l: number) => setParams({ [keys.limit]: l, [keys.page]: 1 }),
     },
-    reset: () => setParams(null),
+    // Restore defaults rather than clearing: a bare URL makes the backend fall back to its own page size/sort.
+    reset: () =>
+      setParams({
+        [keys.query]: "",
+        [keys.page]: 1,
+        [keys.limit]: defaultLimit,
+        [keys.sort_field]: defaultSort?.key ?? null,
+        [keys.sort_order]: defaultSort?.order ?? null,
+      }),
   };
 }
