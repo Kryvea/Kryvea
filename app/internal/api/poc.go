@@ -158,6 +158,11 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 	_, err = d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		pocs := safePocs.GetAll()
 		for i := range pocs {
+			// only image pocs carry image data; skip the file insert for the rest
+			if len(pocs[i].ImageData) == 0 {
+				continue
+			}
+
 			imageID, mime, err := d.db.FileReference().Insert(ctx, pocs[i].ImageData)
 			if err != nil {
 				return nil, fmt.Errorf("PoC %d: Cannot upload image", i)
