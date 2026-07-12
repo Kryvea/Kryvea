@@ -81,7 +81,7 @@ func (ui *UserIndex) Login(ctx context.Context, username, password string) (*mod
 	if !crypto.Compare(password, row.Password) {
 		return nil, store.ErrInvalidCredentials
 	}
-	if row.DisabledAt.Before(time.Now()) {
+	if row.DisabledAt != nil && row.DisabledAt.Before(time.Now()) {
 		return nil, store.ErrDisabledUser
 	}
 
