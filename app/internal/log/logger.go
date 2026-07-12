@@ -1,7 +1,6 @@
 package log
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 
@@ -14,38 +13,22 @@ const (
 	logFileName = "kryvea.log"
 )
 
-type levelWriter struct {
-	writer   io.Writer
-	minLevel zerolog.Level
-	maxLevel zerolog.Level
-}
-
-func (lw levelWriter) Write(p []byte) (n int, err error) {
-	return lw.writer.Write(p)
-}
-
-func (lw levelWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
-	if level >= lw.minLevel && level <= lw.maxLevel {
-		return lw.writer.Write(p)
-	}
-	return len(p), nil
-}
-
-func NewLevelWriter(logPath string, maxSizeMB, maxBackups, maxAgeDays int, compress bool) zerolog.LevelWriter {
+// NewLevelWriter returns a writer that duplicates every log line to
+// stdout and to a size-rotated log file in logDir.
+func NewLevelWriter(logDir string, maxSizeMB, maxBackups, maxAgeDays int, compress bool) zerolog.LevelWriter {
 	logWriter := &lumberjack.Logger{
-		Filename:   filepath.Join(logPath, logFileName),
+		Filename:   filepath.Join(logDir, logFileName),
 		MaxSize:    maxSizeMB,
 		MaxBackups: maxBackups,
 		MaxAge:     maxAgeDays,
 		Compress:   compress,
 	}
 
-	return zerolog.MultiLevelWriter(
-		levelWriter{writer: os.Stdout, minLevel: zerolog.DebugLevel, maxLevel: zerolog.PanicLevel},
-		levelWriter{writer: logWriter, minLevel: zerolog.DebugLevel, maxLevel: zerolog.PanicLevel},
-	)
+	return zerolog.MultiLevelWriter(os.Stdout, logWriter)
 }
 
+// GetLogPath returns the path of the current log file. It reads the log
+// directory from config because its callers do not have it at hand.
 func GetLogPath() string {
 	return filepath.Join(config.GetLogDirectory(), logFileName)
 }
