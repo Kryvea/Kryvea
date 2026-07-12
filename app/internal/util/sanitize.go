@@ -6,20 +6,21 @@ import (
 	"strings"
 )
 
+// fileNameReplacer replaces invalid characters with underscores and strips double quotes
+var fileNameReplacer = strings.NewReplacer(
+	"/", "_",
+	"\\", "_",
+	":", "_",
+	"*", "_",
+	"?", "_",
+	"<", "_",
+	">", "_",
+	"|", "_",
+	"\"", "",
+)
+
 func SanitizeFileName(name string) string {
-	// Replace invalid characters with underscores
-	replacer := strings.NewReplacer(
-		"/", "_",
-		"\\", "_",
-		":", "_",
-		"*", "_",
-		"?", "_",
-		"<", "_",
-		">", "_",
-		"|", "_",
-		"\"", "",
-	)
-	return replacer.Replace(name)
+	return fileNameReplacer.Replace(name)
 }
 
 func ContentDispositionAttachment(name string) string {

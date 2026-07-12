@@ -2,6 +2,23 @@ package model
 
 import "github.com/google/uuid"
 
+const (
+	PocTypeText    = "text"
+	PocTypeRequest = "request/response"
+	PocTypeImage   = "image"
+)
+
+var PocTypes = map[string]struct{}{
+	PocTypeText:    {},
+	PocTypeRequest: {},
+	PocTypeImage:   {},
+}
+
+func IsValidPocType(t string) bool {
+	_, ok := PocTypes[t]
+	return ok
+}
+
 type Poc struct {
 	Model
 	Pocs            []PocItem `json:"pocs"`

@@ -10,10 +10,6 @@ import (
 )
 
 func ParseFormFile(c *fiber.Ctx, param string) ([]byte, error) {
-	if param == "" {
-		return nil, nil
-	}
-
 	fileHeader, err := c.FormFile(param)
 	if err != nil {
 		return nil, err

@@ -3,9 +3,9 @@ package model
 import "time"
 
 const (
-	ASSESSMENT_STATUS_ON_HOLD     = "On Hold"
-	ASSESSMENT_STATUS_IN_PROGRESS = "In Progress"
-	ASSESSMENT_STATUS_COMPLETED   = "Completed"
+	AssessmentStatusOnHold     = "On Hold"
+	AssessmentStatusInProgress = "In Progress"
+	AssessmentStatusCompleted  = "Completed"
 )
 
 type Assessment struct {

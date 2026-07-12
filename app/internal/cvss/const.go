@@ -1,17 +1,12 @@
 package cvss
 
-import "sort"
-
 const (
 	Cvss2  = "2.0"
 	Cvss3  = "3.0"
 	Cvss31 = "3.1"
 	Cvss4  = "4.0"
 
-	Cvss2Prefix  = "CVSS2#"
-	Cvss3Prefix  = "CVSS:3.0/"
-	Cvss31Prefix = "CVSS:3.1/"
-	Cvss4Prefix  = "CVSS:4.0"
+	Cvss2Prefix = "CVSS2#"
 
 	CvssSeverityCritical = "Critical"
 	CvssSeverityHigh     = "High"
@@ -75,6 +70,9 @@ type SeverityThreshold struct {
 	Severity string
 }
 
+// severityLevels maps each CVSS version to its severity thresholds.
+// Each slice must stay sorted by descending score: ParseVector assigns
+// the severity of the first threshold the score reaches.
 var severityLevels = map[string][]SeverityThreshold{
 	Cvss2: {
 		{7.0, CvssSeverityHigh},
@@ -102,12 +100,4 @@ var severityLevels = map[string][]SeverityThreshold{
 		{0.1, CvssSeverityLow},
 		{0.0, CvssSeverityNone},
 	},
-}
-
-func init() {
-	for _, thresholds := range severityLevels {
-		sort.Slice(thresholds, func(i, j int) bool {
-			return thresholds[i].Score > thresholds[j].Score
-		})
-	}
 }

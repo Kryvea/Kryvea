@@ -35,15 +35,7 @@ func GetRootPath() string {
 }
 
 func GetBodyLimitMB() int {
-	defaultLimit := 1_000
-	limit := getEnvConfig(bodyLimitEnv, "")
-
-	bodyLimit, err := strconv.Atoi(limit)
-	if err != nil {
-		return defaultLimit
-	}
-
-	return bodyLimit
+	return getEnvInt(bodyLimitEnv, 1_000)
 }
 
 // GetPgDSN returns the PostgreSQL connection string.
@@ -52,21 +44,23 @@ func GetPgDSN() string {
 }
 
 // GetPgMaxConns maps to sql.DB.SetMaxOpenConns. 0 means "default".
-func GetPgMaxConns() int32 {
-	v, err := strconv.Atoi(os.Getenv(pgMaxConnsEnv))
-	if err != nil || v <= 0 {
+func GetPgMaxConns() int {
+	v := getEnvInt(pgMaxConnsEnv, 0)
+	if v <= 0 {
 		return 0
 	}
-	return int32(v)
+	return v
 }
 
-// GetPgMinConns maps to sql.DB.SetMaxIdleConns. 0 means "default".
-func GetPgMinConns() int32 {
-	v, err := strconv.Atoi(os.Getenv(pgMinConnsEnv))
-	if err != nil || v < 0 {
+// GetPgMinConns maps to sql.DB.SetMaxIdleConns, i.e. despite its name
+// (KRYVEA_PG_MIN_CONNS, kept for deployment compatibility) it sets the
+// maximum number of idle connections. 0 means "default".
+func GetPgMinConns() int {
+	v := getEnvInt(pgMinConnsEnv, 0)
+	if v < 0 {
 		return 0
 	}
-	return int32(v)
+	return v
 }
 
 // GetPgMaxConnLifetime maps to sql.DB.SetConnMaxLifetime. 0 means "default".
@@ -106,51 +100,19 @@ func GetLogDirectory() string {
 }
 
 func GetLogMaxSizeMB() int {
-	defaultSize := 10
-	size := getEnvConfig(logMaxSizeMBEnv, "")
-
-	maxSize, err := strconv.Atoi(size)
-	if err != nil {
-		return defaultSize
-	}
-
-	return maxSize
+	return getEnvInt(logMaxSizeMBEnv, 10)
 }
 
 func GetLogMaxBackups() int {
-	defaultBackups := 5
-	backups := os.Getenv(logMaxBackupsEnv)
-
-	maxBackups, err := strconv.Atoi(backups)
-	if err != nil {
-		return defaultBackups
-	}
-
-	return maxBackups
+	return getEnvInt(logMaxBackupsEnv, 5)
 }
 
 func GetLogMaxAgeDays() int {
-	defaultAge := 0
-	age := os.Getenv(logMaxAgeDaysEnv)
-
-	maxAge, err := strconv.Atoi(age)
-	if err != nil {
-		return defaultAge
-	}
-
-	return maxAge
+	return getEnvInt(logMaxAgeDaysEnv, 0)
 }
 
 func GetLogCompress() bool {
-	defaultCompress := true
-	compress := os.Getenv(logCompressEnv)
-
-	compressBool, err := strconv.ParseBool(compress)
-	if err != nil {
-		return defaultCompress
-	}
-
-	return compressBool
+	return getEnvBool(logCompressEnv, true)
 }
 
 func GetLocalesPath() string {
@@ -164,4 +126,22 @@ func getEnvConfig(envName, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func getEnvInt(envName string, defaultValue int) int {
+	value, err := strconv.Atoi(os.Getenv(envName))
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
+}
+
+func getEnvBool(envName string, defaultValue bool) bool {
+	value, err := strconv.ParseBool(os.Getenv(envName))
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
 }

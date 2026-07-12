@@ -13,3 +13,7 @@ type Customer struct {
 
 	LogoData []byte `json:"-"`
 }
+
+func IsNullCustomer(customer *Customer) bool {
+	return customer == nil || customer.ID == uuid.Nil
+}

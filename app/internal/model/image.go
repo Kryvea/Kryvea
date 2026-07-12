@@ -2,16 +2,15 @@ package model
 
 import "github.com/gabriel-vasile/mimetype"
 
-var (
-	ImageTypeJpeg           = "jpg"
-	ImageTypePng            = "png"
-	MimeTypeJpeg            = "image/jpeg"
-	MimeTypePng             = "image/png"
-	SupportedImageMimeTypes = map[string]string{
-		MimeTypeJpeg: ImageTypeJpeg,
-		MimeTypePng:  ImageTypePng,
-	}
+const (
+	MimeTypeJpeg = "image/jpeg"
+	MimeTypePng  = "image/png"
 )
+
+var SupportedImageMimeTypes = map[string]struct{}{
+	MimeTypeJpeg: {},
+	MimeTypePng:  {},
+}
 
 func IsImageTypeAllowed(data []byte) bool {
 	mime := mimetype.Detect(data).String()

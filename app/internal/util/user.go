@@ -114,26 +114,23 @@ func SetSessionCookies(c *fiber.Ctx, role string, token crypto.Token, expires ti
 	SetKryveaShadowCookie(c, role, expires)
 }
 
-func SetKryveaCookie(c *fiber.Ctx, value string, expires time.Time) {
+func setCookie(c *fiber.Ctx, name, value string, httpOnly bool, expires time.Time) {
 	c.Cookie(&fiber.Cookie{
-		Name:     KryveaSessionCookie,
+		Name:     name,
 		Value:    value,
 		Secure:   true,
-		HTTPOnly: true,
+		HTTPOnly: httpOnly,
 		SameSite: "Strict",
 		Expires:  expires,
 	})
 }
 
+func SetKryveaCookie(c *fiber.Ctx, value string, expires time.Time) {
+	setCookie(c, KryveaSessionCookie, value, true, expires)
+}
+
 func SetKryveaShadowCookie(c *fiber.Ctx, value string, expires time.Time) {
-	c.Cookie(&fiber.Cookie{
-		Name:     KryveaShadowCookie,
-		Value:    value,
-		Secure:   true,
-		HTTPOnly: false,
-		SameSite: "Strict",
-		Expires:  expires,
-	})
+	setCookie(c, KryveaShadowCookie, value, false, expires)
 }
 
 func ClearCookies(c *fiber.Ctx) {
@@ -142,12 +139,5 @@ func ClearCookies(c *fiber.Ctx) {
 	// The fiber function ClearCookie does not allow
 	// frontend to check cookie existence as quickly as
 	// the following approach does
-	c.Cookie(&fiber.Cookie{
-		Name:     KryveaShadowCookie,
-		Value:    "",
-		Secure:   true,
-		HTTPOnly: false,
-		SameSite: "Strict",
-		Expires:  time.Now().Add(-1 * time.Hour),
-	})
+	setCookie(c, KryveaShadowCookie, "", false, time.Now().Add(-1*time.Hour))
 }

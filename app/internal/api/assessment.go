@@ -740,9 +740,9 @@ func (d *Driver) assessmentFromParam(ctx context.Context, assessmentParam string
 func (d *Driver) validateAssessmentStatus(data *assessmentRequestData) string {
 	switch data.Status {
 	case
-		model.ASSESSMENT_STATUS_ON_HOLD,
-		model.ASSESSMENT_STATUS_IN_PROGRESS,
-		model.ASSESSMENT_STATUS_COMPLETED:
+		model.AssessmentStatusOnHold,
+		model.AssessmentStatusInProgress,
+		model.AssessmentStatusCompleted:
 	default:
 		return "Invalid status"
 	}

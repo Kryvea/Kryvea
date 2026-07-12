@@ -47,7 +47,7 @@ func TestParseVector(t *testing.T) {
 
 		// Test cases for CVSS31
 		{
-			name:             "Valid CVSS3 vector",
+			name:             "Valid CVSS31 vector",
 			vector:           "CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:L/E:P/RL:X/RC:X",
 			version:          Cvss31,
 			expectedScore:    4.4,

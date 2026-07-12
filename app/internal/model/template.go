@@ -2,19 +2,20 @@ package model
 
 import "github.com/google/uuid"
 
-var (
-	TemplateTypeXlsx           = "xlsx"
-	TemplateTypeDocx           = "docx"
-	TemplateTypeZip            = "generic-zip"
-	XlsxMimeType               = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	DocxMimeType               = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	ZipMimeType                = "application/zip"
-	SupportedTemplateMimeTypes = map[string]string{
-		XlsxMimeType: TemplateTypeXlsx,
-		DocxMimeType: TemplateTypeDocx,
-		ZipMimeType:  TemplateTypeZip,
-	}
+const (
+	TemplateTypeXlsx = "xlsx"
+	TemplateTypeDocx = "docx"
+	TemplateTypeZip  = "generic-zip"
+	XlsxMimeType     = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	DocxMimeType     = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	ZipMimeType      = "application/zip"
 )
+
+var SupportedTemplateMimeTypes = map[string]string{
+	XlsxMimeType: TemplateTypeXlsx,
+	DocxMimeType: TemplateTypeDocx,
+	ZipMimeType:  TemplateTypeZip,
+}
 
 type Template struct {
 	Model
