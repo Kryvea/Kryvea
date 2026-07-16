@@ -29,19 +29,12 @@ export default function Modal({
   const mouseDownRef = useRef<any>(null);
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      switch (event.key) {
-        case "Enter":
-          onConfirm?.();
-          break;
-      }
+    function handleKeyDown(event) {
+      if (event.key === "Enter") onConfirm?.();
     }
-
     document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onConfirm]);
 
   const footer = (
     <Buttons>

@@ -8,7 +8,7 @@ type Props = {
   noHighlight?: boolean;
 };
 
-export default function Card({ className, children, footer, noHighlight }: Props) {
+export default function Card({ className = "", children, footer, noHighlight }: Props) {
   return (
     <Grid className={`cardbox ${noHighlight ? `no-highlight` : ""} ${className}`}>
       {children}
