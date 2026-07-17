@@ -72,10 +72,9 @@ func (i *FileReferenceIndex) Insert(ctx context.Context, data []byte) (uuid.UUID
 	}
 
 	row := &dbFileReference{
-		ID:        id,
-		Checksum:  checksum[:],
-		MimeType:  mime,
-		SizeBytes: int64(len(data)),
+		ID:       id,
+		Checksum: checksum[:],
+		MimeType: mime,
 	}
 	if _, err := idbFrom(ctx, i.driver.db).NewInsert().Model(row).Exec(ctx); err != nil {
 		_ = i.driver.deleteFile(id)
@@ -84,7 +83,7 @@ func (i *FileReferenceIndex) Insert(ctx context.Context, data []byte) (uuid.UUID
 	return id, mime, nil
 }
 
-func (i *FileReferenceIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.FileReference, error) {
+func (i *FileReferenceIndex) getRowByID(ctx context.Context, id uuid.UUID) (*model.FileReference, error) {
 	var row dbFileReference
 	err := idbFrom(ctx, i.driver.db).NewSelect().
 		Model(&row).
@@ -94,13 +93,20 @@ func (i *FileReferenceIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.
 		return nil, mapErr(err)
 	}
 	out := row.toModel()
+	return &out, nil
+}
 
+func (i *FileReferenceIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.FileReference, error) {
+	out, err := i.getRowByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	usedBy, err := i.usedByOf(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	out.UsedBy = usedBy
-	return &out, nil
+	return out, nil
 }
 
 func (i *FileReferenceIndex) usedByOf(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
@@ -134,8 +140,10 @@ func (i *FileReferenceIndex) GetByChecksum(ctx context.Context, checksum [16]byt
 	return &out, nil
 }
 
+// ReadByID returns the file payload plus its reference row. Unlike GetByID it
+// skips the UsedBy usage query, which no caller of ReadByID consumes.
 func (i *FileReferenceIndex) ReadByID(ctx context.Context, id uuid.UUID) ([]byte, *model.FileReference, error) {
-	fr, err := i.GetByID(ctx, id)
+	fr, err := i.getRowByID(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}

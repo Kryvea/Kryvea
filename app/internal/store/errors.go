@@ -15,8 +15,4 @@ var (
 	ErrInvalidSortField       = errors.New("invalid sort_field")
 	ErrNotFound               = errors.New("not found")
 	ErrDuplicateKey           = errors.New("duplicate key")
-	ErrFKViolation            = errors.New("foreign key violation")
-	ErrNotNullViolation       = errors.New("not null violation")
-	ErrDeadlock               = errors.New("deadlock detected")
-	ErrLockNotAvailable       = errors.New("lock not available")
 )

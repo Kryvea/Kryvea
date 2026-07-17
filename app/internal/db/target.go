@@ -60,8 +60,8 @@ func (ti *TargetIndex) FirstOrInsert(ctx context.Context, target *model.Target, 
 	}
 	if err := q.Scan(ctx); err == nil {
 		return existing.ID, false, nil
-	} else if !errors.Is(mapErr(err), store.ErrNotFound) {
-		return uuid.Nil, false, mapErr(err)
+	} else if err = mapErr(err); !errors.Is(err, store.ErrNotFound) {
+		return uuid.Nil, false, err
 	}
 	id, err := ti.Insert(ctx, target, customerID)
 	return id, true, err

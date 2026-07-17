@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"time"
 
 	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/google/uuid"
@@ -44,7 +43,7 @@ func (ai *AssessmentIndex) Insert(ctx context.Context, assessment *model.Assessm
 		Status:          assessment.Status,
 		TypeShort:       assessment.Type.Short,
 		TypeFull:        assessment.Type.Full,
-		CVSSVersions:    boolMap(assessment.CVSSVersions),
+		CVSSVersions:    emptyMapIfNil(assessment.CVSSVersions),
 		Environment:     assessment.Environment,
 		TestingType:     assessment.TestingType,
 		OSSTMMVector:    assessment.OSSTMMVector,
@@ -165,7 +164,7 @@ func (ai *AssessmentIndex) Update(ctx context.Context, id uuid.UUID, assessment 
 		Set("status = ?", assessment.Status).
 		Set("type_short = ?", assessment.Type.Short).
 		Set("type_full = ?", assessment.Type.Full).
-		Set("cvss_versions = ?", boolMap(assessment.CVSSVersions)).
+		Set("cvss_versions = ?", emptyMapIfNil(assessment.CVSSVersions)).
 		Set("environment = ?", assessment.Environment).
 		Set("testing_type = ?", assessment.TestingType).
 		Set("osstmm_vector = ?", assessment.OSSTMMVector).
@@ -254,28 +253,58 @@ func (ai *AssessmentIndex) Clone(ctx context.Context, sourceID uuid.UUID, name s
 		return uuid.Nil, mapErr(err)
 	}
 
-	vulns, err := ai.driver.Vulnerability().GetByAssessmentID(ctx, sourceID)
-	if err != nil {
-		return uuid.Nil, err
+	if includePocs {
+		_, err = idb.NewRaw(cloneVulnerabilitiesWithPocsSQL, sourceID, newID).Exec(ctx)
+	} else {
+		_, err = idb.NewRaw(`
+			INSERT INTO vulnerability (id, assessment_id, `+vulnCloneColumns+`)
+			SELECT gen_random_uuid(), ?, `+vulnCloneColumns+`
+			FROM vulnerability WHERE assessment_id = ?
+		`, newID, sourceID).Exec(ctx)
 	}
-	for _, v := range vulns {
-		if _, err := ai.driver.Vulnerability().Clone(ctx, v.ID, newID, includePocs); err != nil {
-			return uuid.Nil, err
-		}
+	if err != nil {
+		return uuid.Nil, mapErr(err)
 	}
 	return newID, nil
 }
 
-func timePtrIfSet(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
-	}
-	return &t
-}
-
-func boolMap(m map[string]bool) map[string]bool {
-	if m == nil {
-		return map[string]bool{}
-	}
-	return m
-}
+// cloneVulnerabilitiesWithPocsSQL clones every vulnerability of an assessment
+// together with its poc and poc_image rows in a single set-based statement.
+const cloneVulnerabilitiesWithPocsSQL = `
+	WITH vuln_map AS MATERIALIZED (
+		SELECT id AS old_id, gen_random_uuid() AS new_id
+		FROM vulnerability
+		WHERE assessment_id = ?
+	),
+	ins_vuln AS (
+		INSERT INTO vulnerability (id, assessment_id, ` + vulnCloneColumns + `)
+		SELECT m.new_id, ?, ` + vulnCloneColumns + `
+		FROM vulnerability
+		JOIN vuln_map m ON m.old_id = vulnerability.id
+	),
+	poc_map AS MATERIALIZED (
+		SELECT gen_random_uuid() AS new_poc_id, m.new_id AS new_vulnerability_id, p.items
+		FROM poc p
+		JOIN vuln_map m ON m.old_id = p.vulnerability_id
+	),
+	item_map AS MATERIALIZED (
+		SELECT pm.new_poc_id, t.item, t.ord, gen_random_uuid() AS new_item_id
+		FROM poc_map pm
+		CROSS JOIN LATERAL jsonb_array_elements(pm.items) WITH ORDINALITY AS t(item, ord)
+	),
+	ins_poc AS (
+		INSERT INTO poc (id, vulnerability_id, items)
+		SELECT pm.new_poc_id, pm.new_vulnerability_id,
+			COALESCE((
+				SELECT jsonb_agg(jsonb_set(im.item, '{id}', to_jsonb(im.new_item_id)) ORDER BY im.ord)
+				FROM item_map im
+				WHERE im.new_poc_id = pm.new_poc_id
+			), '[]'::jsonb)
+		FROM poc_map pm
+	)
+	INSERT INTO poc_image (poc_id, poc_item_id, file_reference_id)
+	SELECT im.new_poc_id, im.new_item_id, (im.item->>'image_id')::uuid
+	FROM item_map im
+	WHERE COALESCE(im.item->>'image_id', '')
+		NOT IN ('', '00000000-0000-0000-0000-000000000000')
+`

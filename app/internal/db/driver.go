@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -32,10 +33,10 @@ func NewDriver(ctx context.Context, dsn, filesDir, adminUser, adminPass string, 
 	sqlDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
 
 	if v := config.GetPgMaxConns(); v > 0 {
-		sqlDB.SetMaxOpenConns(int(v))
+		sqlDB.SetMaxOpenConns(v)
 	}
 	if v := config.GetPgMinConns(); v > 0 {
-		sqlDB.SetMaxIdleConns(int(v))
+		sqlDB.SetMaxIdleConns(v)
 	}
 	if v := config.GetPgMaxConnLifetime(); v > 0 {
 		sqlDB.SetConnMaxLifetime(v)
@@ -86,8 +87,6 @@ func NewDriver(ctx context.Context, dsn, filesDir, adminUser, adminPass string, 
 	return d, nil
 }
 
-func (d *Driver) DB() *bun.DB { return d.db }
-
 func (d *Driver) Close() error {
 	if d.db != nil {
 		_ = d.db.Close()
@@ -107,10 +106,10 @@ func (d *Driver) bootstrapAdmin(ctx context.Context, adminUser, adminPass string
 		d.logger.Warn().Msg("admin credentials empty, skipping admin bootstrap")
 		return nil
 	}
-	users := d.User().(*UserIndex)
+	users := &UserIndex{driver: d}
 
 	existing, err := users.GetByUsername(ctx, adminUser)
-	if err != nil && err != store.ErrNotFound {
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("check admin user: %w", err)
 	}
 	if existing != nil {

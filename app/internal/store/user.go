@@ -19,7 +19,6 @@ type UserStore interface {
 	GetAll(ctx context.Context) ([]model.User, error)
 	GetAllUsernames(ctx context.Context) ([]string, error)
 	GetByToken(ctx context.Context, token crypto.Token) (*model.User, error)
-	GetByUsername(ctx context.Context, username string) (*model.User, error)
 
 	Update(ctx context.Context, ID uuid.UUID, user *model.User) error
 	UpdateMe(ctx context.Context, userID uuid.UUID, newUser *model.User, password string) error

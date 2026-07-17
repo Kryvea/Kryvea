@@ -18,4 +18,8 @@ type CustomerStore interface {
 	GetByID(ctx context.Context, customerID uuid.UUID) (*model.Customer, error)
 	GetByIDWithRelations(ctx context.Context, customerID uuid.UUID) (*model.Customer, error)
 	GetAll(ctx context.Context, customerIDs []uuid.UUID) ([]model.Customer, error)
+
+	// ExistingIDs returns the subset of customerIDs that exist, without loading
+	// full rows or relations.
+	ExistingIDs(ctx context.Context, customerIDs []uuid.UUID) ([]uuid.UUID, error)
 }

@@ -19,7 +19,7 @@ func (ui *UserIndex) Insert(ctx context.Context, user *model.User, password stri
 	if err != nil {
 		return uuid.Nil, err
 	}
-	hash, err := crypto.Encrypt(password)
+	hash, err := crypto.HashPassword(password)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -73,12 +73,12 @@ func (ui *UserIndex) Login(ctx context.Context, username, password string) (*mod
 		Where("username = ?", username).
 		Scan(ctx)
 	if err != nil {
-		if errors.Is(mapErr(err), store.ErrNotFound) {
+		if err = mapErr(err); errors.Is(err, store.ErrNotFound) {
 			return nil, store.ErrInvalidCredentials
 		}
-		return nil, mapErr(err)
+		return nil, err
 	}
-	if !crypto.Compare(password, row.Password) {
+	if !crypto.ComparePassword(password, row.Password) {
 		return nil, store.ErrInvalidCredentials
 	}
 	if row.DisabledAt != nil && row.DisabledAt.Before(time.Now()) {
@@ -214,7 +214,12 @@ func (ui *UserIndex) Update(ctx context.Context, id uuid.UUID, user *model.User)
 		}
 	}
 
-	count, err := idb.NewSelect().
+	return ui.ensureAdminExists(ctx)
+}
+
+// ensureAdminExists returns ErrAdminUserRequired when no admin user is left.
+func (ui *UserIndex) ensureAdminExists(ctx context.Context) error {
+	count, err := idbFrom(ctx, ui.driver.db).NewSelect().
 		Model((*dbUser)(nil)).
 		Where("role = ?", model.RoleAdmin).
 		Count(ctx)
@@ -235,7 +240,7 @@ func (ui *UserIndex) UpdateMe(ctx context.Context, id uuid.UUID, user *model.Use
 		dirty = true
 	}
 	if password != "" {
-		hash, err := crypto.Encrypt(password)
+		hash, err := crypto.HashPassword(password)
 		if err != nil {
 			return err
 		}
@@ -282,21 +287,11 @@ func (ui *UserIndex) Delete(ctx context.Context, id uuid.UUID) error {
 		Exec(ctx); err != nil {
 		return mapErr(err)
 	}
-	count, err := idb.NewSelect().
-		Model((*dbUser)(nil)).
-		Where("role = ?", model.RoleAdmin).
-		Count(ctx)
-	if err != nil {
-		return mapErr(err)
-	}
-	if count == 0 {
-		return store.ErrAdminUserRequired
-	}
-	return nil
+	return ui.ensureAdminExists(ctx)
 }
 
 func (ui *UserIndex) ResetUserPassword(ctx context.Context, id uuid.UUID, newPassword string) error {
-	hash, err := crypto.Encrypt(newPassword)
+	hash, err := crypto.HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
@@ -310,7 +305,7 @@ func (ui *UserIndex) ResetUserPassword(ctx context.Context, id uuid.UUID, newPas
 }
 
 func (ui *UserIndex) ResetPassword(ctx context.Context, user *model.User, password string) error {
-	hash, err := crypto.Encrypt(password)
+	hash, err := crypto.HashPassword(password)
 	if err != nil {
 		return err
 	}
@@ -337,12 +332,12 @@ func (ui *UserIndex) ValidatePassword(ctx context.Context, id uuid.UUID, current
 		Where("id = ?", id).
 		Scan(ctx)
 	if err != nil {
-		if errors.Is(mapErr(err), store.ErrNotFound) {
+		if err = mapErr(err); errors.Is(err, store.ErrNotFound) {
 			return store.ErrInvalidCredentials
 		}
-		return mapErr(err)
+		return err
 	}
-	if !crypto.Compare(currentPassword, row.Password) {
+	if !crypto.ComparePassword(currentPassword, row.Password) {
 		return store.ErrInvalidCredentials
 	}
 	return nil
@@ -381,18 +376,4 @@ func rowToUserWithRelations(r *dbUser) model.User {
 		u.Assessments[i] = r.Assessments[i].toModel()
 	}
 	return u
-}
-
-func timeOrTimeNever(t time.Time) time.Time {
-	if t.IsZero() {
-		return model.TimeNever
-	}
-	return t
-}
-
-func timePtrOrTimeNever(t time.Time) *time.Time {
-	if t.IsZero() {
-		return &model.TimeNever
-	}
-	return &t
 }

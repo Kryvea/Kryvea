@@ -230,6 +230,10 @@ func (d *Driver) GetPocsByVulnerability(c *fiber.Ctx) error {
 	// parse vulnerability param
 	poc, err := d.db.Poc().GetByVulnerabilityID(c.UserContext(), vulnerability.ID)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			c.Status(fiber.StatusOK)
+			return c.JSON([]model.PocItem{})
+		}
 		c.Status(fiber.StatusInternalServerError)
 		return c.JSON(fiber.Map{
 			"error": "Cannot get PoCs",

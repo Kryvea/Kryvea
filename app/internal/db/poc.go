@@ -15,11 +15,6 @@ import (
 type PocIndex struct{ driver *Driver }
 
 func (pi *PocIndex) Upsert(ctx context.Context, poc *model.Poc) error {
-	old, err := pi.GetByVulnerabilityID(ctx, poc.VulnerabilityID)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		return err
-	}
-
 	for i := range poc.Pocs {
 		if poc.Pocs[i].ID == uuid.Nil {
 			id, err := uuid.NewRandom()
@@ -35,31 +30,26 @@ func (pi *PocIndex) Upsert(ctx context.Context, poc *model.Poc) error {
 
 	idb := idbFrom(ctx, pi.driver.db)
 
-	var pocID uuid.UUID
-	if old != nil && old.ID != uuid.Nil {
-		pocID = old.ID
-		if _, err := idb.NewUpdate().
-			Model((*dbPoc)(nil)).
-			Set("items = ?", poc.Pocs).
-			Where("id = ?", pocID).
-			Exec(ctx); err != nil {
-			return mapErr(err)
-		}
-	} else {
-		pocID, err = uuid.NewRandom()
-		if err != nil {
-			return err
-		}
-		if _, err := idb.NewInsert().
-			Model(&dbPoc{
-				ID:              pocID,
-				VulnerabilityID: poc.VulnerabilityID,
-				Items:           poc.Pocs,
-			}).
-			Exec(ctx); err != nil {
-			return mapErr(err)
-		}
+	newID, err := uuid.NewRandom()
+	if err != nil {
+		return err
 	}
+	// vulnerability_id is unique: a single upsert either inserts a fresh row or
+	// replaces the items of the existing one. RETURNING yields the winning id.
+	row := &dbPoc{
+		ID:              newID,
+		VulnerabilityID: poc.VulnerabilityID,
+		Items:           poc.Pocs,
+	}
+	if _, err := idb.NewInsert().
+		Model(row).
+		On("CONFLICT (vulnerability_id) DO UPDATE").
+		Set("items = EXCLUDED.items").
+		Returning("id").
+		Exec(ctx); err != nil {
+		return mapErr(err)
+	}
+	pocID := row.ID
 	poc.ID = pocID
 	poc.UpdatedAt = time.Now()
 
@@ -128,91 +118,63 @@ func (pi *PocIndex) BulkInsertNew(ctx context.Context, pocs []model.Poc) error {
 	return mapErr(err)
 }
 
-func (pi *PocIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.Poc, error) {
+func (pi *PocIndex) getOne(ctx context.Context, where string, arg uuid.UUID) (*model.Poc, error) {
 	var row dbPoc
-	err := idbFrom(ctx, pi.driver.db).NewSelect().
+	if err := idbFrom(ctx, pi.driver.db).NewSelect().
 		Model(&row).
-		Where("id = ?", id).
-		Scan(ctx)
-	if err != nil {
-		if errors.Is(mapErr(err), store.ErrNotFound) {
-			return &model.Poc{Pocs: []model.PocItem{}}, nil
-		}
+		Where(where, arg).
+		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
 	out := row.toModel()
 	return &out, nil
+}
+
+func (pi *PocIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.Poc, error) {
+	return pi.getOne(ctx, "id = ?", id)
 }
 
 func (pi *PocIndex) GetByVulnerabilityID(ctx context.Context, vulnerabilityID uuid.UUID) (*model.Poc, error) {
-	var row dbPoc
-	err := idbFrom(ctx, pi.driver.db).NewSelect().
-		Model(&row).
-		Where("vulnerability_id = ?", vulnerabilityID).
-		Scan(ctx)
-	if err != nil {
-		if errors.Is(mapErr(err), store.ErrNotFound) {
-			return &model.Poc{Pocs: []model.PocItem{}}, nil
-		}
-		return nil, mapErr(err)
-	}
-	out := row.toModel()
-	return &out, nil
+	return pi.getOne(ctx, "vulnerability_id = ?", vulnerabilityID)
 }
 
 func (pi *PocIndex) GetByImageID(ctx context.Context, imageID uuid.UUID) ([]model.Poc, error) {
-	type pocPlusJoin struct {
-		ID              uuid.UUID       `bun:"id"`
-		CreatedAt       time.Time       `bun:"created_at,nullzero"`
-		UpdatedAt       time.Time       `bun:"updated_at,nullzero"`
-		VulnerabilityID uuid.UUID       `bun:"vulnerability_id"`
-		Items           []model.PocItem `bun:"items,type:jsonb"`
-	}
-	var rows []pocPlusJoin
+	var rows []dbPoc
 	if err := idbFrom(ctx, pi.driver.db).NewSelect().
-		TableExpr("poc AS p").
-		ColumnExpr("DISTINCT p.id, p.created_at, p.updated_at, p.vulnerability_id, p.items").
-		Join("JOIN poc_image pi ON pi.poc_id = p.id").
-		Where("pi.file_reference_id = ?", imageID).
-		Scan(ctx, &rows); err != nil {
+		Model(&rows).
+		Where("EXISTS (SELECT 1 FROM poc_image img WHERE img.poc_id = p.id AND img.file_reference_id = ?)", imageID).
+		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
 	out := make([]model.Poc, len(rows))
-	for i, r := range rows {
-		p := model.Poc{
-			VulnerabilityID: r.VulnerabilityID,
-			Pocs:            r.Items,
-		}
-		p.ID = r.ID
-		p.CreatedAt = r.CreatedAt
-		p.UpdatedAt = r.UpdatedAt
-		if p.Pocs == nil {
-			p.Pocs = []model.PocItem{}
-		}
-		out[i] = p
+	for i := range rows {
+		out[i] = rows[i].toModel()
 	}
 	return out, nil
 }
 
-func (pi *PocIndex) Clone(ctx context.Context, pocID, vulnerabilityID uuid.UUID) (uuid.UUID, error) {
-	src, err := pi.GetByID(ctx, pocID)
+// CloneByVulnerabilityID copies the poc of srcVulnerabilityID (if any) onto
+// dstVulnerabilityID, assigning fresh poc and item IDs and re-deriving the
+// poc_image rows. A vulnerability without a poc is a no-op.
+func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerabilityID, dstVulnerabilityID uuid.UUID) error {
+	src, err := pi.GetByVulnerabilityID(ctx, srcVulnerabilityID)
 	if err != nil {
-		return uuid.Nil, err
-	}
-	if src == nil || src.ID == uuid.Nil {
-		return uuid.Nil, store.ErrNotFound
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return err
 	}
 
 	newID, err := uuid.NewRandom()
 	if err != nil {
-		return uuid.Nil, err
+		return err
 	}
 
 	clonedItems := make([]model.PocItem, len(src.Pocs))
 	for i, item := range src.Pocs {
 		newItemID, err := uuid.NewRandom()
 		if err != nil {
-			return uuid.Nil, err
+			return err
 		}
 		clonedItems[i] = item
 		clonedItems[i].ID = newItemID
@@ -222,11 +184,11 @@ func (pi *PocIndex) Clone(ctx context.Context, pocID, vulnerabilityID uuid.UUID)
 	if _, err := idb.NewInsert().
 		Model(&dbPoc{
 			ID:              newID,
-			VulnerabilityID: vulnerabilityID,
+			VulnerabilityID: dstVulnerabilityID,
 			Items:           clonedItems,
 		}).
 		Exec(ctx); err != nil {
-		return uuid.Nil, mapErr(err)
+		return mapErr(err)
 	}
 
 	rows := make([]dbPocImage, 0, len(clonedItems))
@@ -244,8 +206,8 @@ func (pi *PocIndex) Clone(ctx context.Context, pocID, vulnerabilityID uuid.UUID)
 		if _, err := idb.NewInsert().
 			Model(&rows).
 			Exec(ctx); err != nil {
-			return uuid.Nil, mapErr(err)
+			return mapErr(err)
 		}
 	}
-	return newID, nil
+	return nil
 }

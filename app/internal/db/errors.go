@@ -15,19 +15,8 @@ func mapErr(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.ErrNotFound
 	}
-	if pgErr, ok := err.(pgdriver.Error); ok {
-		switch pgErr.Field('C') {
-		case "23505":
-			return store.ErrDuplicateKey
-		case "23503":
-			return store.ErrFKViolation
-		case "23502":
-			return store.ErrNotNullViolation
-		case "40P01":
-			return store.ErrDeadlock
-		case "55P03":
-			return store.ErrLockNotAvailable
-		}
+	if pgErr, ok := err.(pgdriver.Error); ok && pgErr.Field('C') == "23505" {
+		return store.ErrDuplicateKey
 	}
 	return err
 }

@@ -64,8 +64,8 @@ func (ci *CategoryIndex) FirstOrInsert(ctx context.Context, category *model.Cate
 	if err == nil {
 		return row.ID, false, nil
 	}
-	if !errors.Is(mapErr(err), store.ErrNotFound) {
-		return uuid.Nil, false, mapErr(err)
+	if err = mapErr(err); !errors.Is(err, store.ErrNotFound) {
+		return uuid.Nil, false, err
 	}
 	id, err := ci.Insert(ctx, category)
 	return id, true, err
@@ -148,18 +148,4 @@ func (ci *CategoryIndex) Search(ctx context.Context, query string) ([]model.Cate
 		out[i] = r.toModel()
 	}
 	return out, nil
-}
-
-func emptyMapIfNil(m map[string]string) map[string]string {
-	if m == nil {
-		return map[string]string{}
-	}
-	return m
-}
-
-func emptyStringsIfNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }

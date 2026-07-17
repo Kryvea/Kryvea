@@ -86,33 +86,52 @@ func (ci *CustomerIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.Cust
 	return &out, nil
 }
 
-func (ci *CustomerIndex) GetByIDWithRelations(ctx context.Context, id uuid.UUID) (*model.Customer, error) {
-	var row dbCustomer
-	if err := idbFrom(ctx, ci.driver.db).NewSelect().
-		Model(&row).
+func (ci *CustomerIndex) selectWithTemplates(ctx context.Context, row any) *bun.SelectQuery {
+	return idbFrom(ctx, ci.driver.db).NewSelect().
+		Model(row).
 		Relation("Templates", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.Order("created_at DESC")
-		}).
+		})
+}
+
+func rowToCustomerWithTemplates(r *dbCustomer) model.Customer {
+	out := r.toModel()
+	out.Templates = make([]model.Template, len(r.Templates))
+	for i := range r.Templates {
+		out.Templates[i] = r.Templates[i].toModelBare()
+	}
+	return out
+}
+
+func (ci *CustomerIndex) GetByIDWithRelations(ctx context.Context, id uuid.UUID) (*model.Customer, error) {
+	var row dbCustomer
+	if err := ci.selectWithTemplates(ctx, &row).
 		Where("c.id = ?", id).
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
-	out := row.toModel()
-	out.Templates = make([]model.Template, len(row.Templates))
-	for i := range row.Templates {
-		out.Templates[i] = row.Templates[i].toModelBare()
-	}
+	out := rowToCustomerWithTemplates(&row)
 	return &out, nil
+}
+
+func (ci *CustomerIndex) ExistingIDs(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var existing []uuid.UUID
+	if err := idbFrom(ctx, ci.driver.db).NewSelect().
+		Model((*dbCustomer)(nil)).
+		Column("id").
+		Where("id IN (?)", bun.List(ids)).
+		Scan(ctx, &existing); err != nil {
+		return nil, mapErr(err)
+	}
+	return existing, nil
 }
 
 func (ci *CustomerIndex) GetAll(ctx context.Context, ids []uuid.UUID) ([]model.Customer, error) {
 	var rows []dbCustomer
-	q := idbFrom(ctx, ci.driver.db).NewSelect().
-		Model(&rows).
-		Relation("Templates", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.Order("created_at DESC")
-		}).
-		Order("c.name")
+	q := ci.selectWithTemplates(ctx, &rows).Order("c.name")
 	if ids != nil {
 		q = q.Where("c.id IN (?)", bun.List(ids))
 	}
@@ -121,11 +140,7 @@ func (ci *CustomerIndex) GetAll(ctx context.Context, ids []uuid.UUID) ([]model.C
 	}
 	out := make([]model.Customer, len(rows))
 	for i := range rows {
-		out[i] = rows[i].toModel()
-		out[i].Templates = make([]model.Template, len(rows[i].Templates))
-		for j := range rows[i].Templates {
-			out[i].Templates[j] = rows[i].Templates[j].toModelBare()
-		}
+		out[i] = rowToCustomerWithTemplates(&rows[i])
 	}
 	return out, nil
 }

@@ -59,7 +59,7 @@ func seedAssessment(t *testing.T, d *Driver) (customerID, assessmentID, vulnID, 
 	a := &model.Assessment{
 		Name:     uniqueName("a"),
 		Language: "en",
-		Status:   model.ASSESSMENT_STATUS_IN_PROGRESS,
+		Status:   model.AssessmentStatusInProgress,
 		Type:     model.AssessmentType{Short: "WAPT", Full: "Web App PT"},
 		Targets:  []model.Target{{Model: model.Model{ID: target1ID}}, {Model: model.Model{ID: target2ID}}},
 	}
@@ -141,7 +141,7 @@ func TestIntegration_CloneAssessmentWithPoc(t *testing.T) {
 		t.Errorf("cloned targets: got %d, want 2", len(cloned.Targets))
 	}
 
-	cloneVulns, err := d.Vulnerability().GetByAssessmentID(ctx, cloneID)
+	cloneVulns, err := (&VulnerabilityIndex{driver: d}).GetByAssessmentID(ctx, cloneID)
 	if err != nil {
 		t.Fatalf("GetByAssessmentID cloned: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestIntegration_DeleteAssessmentCascade(t *testing.T) {
 		t.Errorf("vulnerability after assessment delete: got err=%v, want ErrNotFound (cascade)", err)
 	}
 
-	pocs, err := d.Vulnerability().GetByAssessmentID(ctx, assessmentID)
+	pocs, err := (&VulnerabilityIndex{driver: d}).GetByAssessmentID(ctx, assessmentID)
 	if err != nil {
 		t.Fatalf("GetByAssessmentID after delete: %v", err)
 	}

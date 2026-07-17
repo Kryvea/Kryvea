@@ -84,12 +84,13 @@ func (d *Driver) applySchema(ctx context.Context) error {
 		}
 	}
 
+	// Repair vulnerability_count only where it is inconsistent. The WHERE probe
+	// uses an index-only count per assessment, so a consistent database (the
+	// steady state, thanks to trg_vulnerability_count) does no writes.
 	if _, err := d.db.ExecContext(ctx, `
-		UPDATE assessment a SET vulnerability_count = sub.cnt
-		FROM (
-			SELECT assessment_id, COUNT(*) AS cnt FROM vulnerability GROUP BY assessment_id
-		) sub
-		WHERE a.id = sub.assessment_id AND a.vulnerability_count <> sub.cnt
+		UPDATE assessment a
+		SET vulnerability_count = (SELECT COUNT(*) FROM vulnerability v WHERE v.assessment_id = a.id)
+		WHERE a.vulnerability_count <> (SELECT COUNT(*) FROM vulnerability v WHERE v.assessment_id = a.id)
 	`); err != nil {
 		return fmt.Errorf("backfill vulnerability_count: %w", err)
 	}
@@ -120,8 +121,12 @@ func createTable(ctx context.Context, db *bun.DB, t tableSpec) error {
 
 var ddlStatements = []string{
 	`ALTER TABLE setting DROP COLUMN IF EXISTS max_image_size_mb`,
+	`ALTER TABLE file_reference DROP COLUMN IF EXISTS size_bytes`,
 
-	`CREATE INDEX IF NOT EXISTS idx_file_reference_checksum     ON file_reference (checksum)`,
+	// checksum already gets a unique index from its UNIQUE constraint; drop the
+	// redundant plain index older databases may still carry.
+	`DROP INDEX IF EXISTS idx_file_reference_checksum`,
+
 	`CREATE INDEX IF NOT EXISTS idx_customer_name_trgm          ON customer USING gin (name gin_trgm_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_user_username_trgm          ON users USING gin (username gin_trgm_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_user_token                  ON users (token) WHERE token IS NOT NULL`,
@@ -224,12 +229,20 @@ var ddlStatements = []string{
 		WHERE NOT (x.item ? 'id') OR (x.item->>'id') = ''
 	)`,
 
+	// Backfill poc_image from the JSONB items. The NOT EXISTS guard makes the
+	// steady-state run read-only instead of attempting a conflicting insert for
+	// every existing image row on each startup.
 	`INSERT INTO poc_image (poc_id, poc_item_id, file_reference_id)
 	SELECT p.id, (item->>'id')::uuid, (item->>'image_id')::uuid
 	FROM poc p, jsonb_array_elements(p.items) item
 	WHERE (item->>'image_id') IS NOT NULL
 	  AND (item->>'image_id') <> ''
 	  AND (item->>'image_id') <> '00000000-0000-0000-0000-000000000000'
+	  AND NOT EXISTS (
+		SELECT 1 FROM poc_image existing
+		WHERE existing.poc_id = p.id
+		  AND existing.poc_item_id = (item->>'id')::uuid
+	  )
 	ON CONFLICT (poc_id, poc_item_id) DO NOTHING`,
 
 	`DROP TABLE IF EXISTS poc_image_usage`,

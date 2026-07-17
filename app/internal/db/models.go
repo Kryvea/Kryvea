@@ -38,7 +38,6 @@ type dbFileReference struct {
 	UpdatedAt time.Time `bun:"updated_at,nullzero,notnull,default:now()"`
 	Checksum  []byte    `bun:"checksum,notnull,unique"`
 	MimeType  string    `bun:"mime_type,notnull"`
-	SizeBytes int64     `bun:"size_bytes,notnull,default:0"`
 }
 
 func (r *dbFileReference) toModel() model.FileReference {

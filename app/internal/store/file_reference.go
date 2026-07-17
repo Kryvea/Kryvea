@@ -11,7 +11,6 @@ type FileReferenceStore interface {
 	Insert(ctx context.Context, data []byte) (uuid.UUID, string, error)
 
 	GetByID(ctx context.Context, id uuid.UUID) (*model.FileReference, error)
-	GetByChecksum(ctx context.Context, checksum [16]byte) (*model.FileReference, error)
 
 	ReadByID(ctx context.Context, id uuid.UUID) ([]byte, *model.FileReference, error)
 
