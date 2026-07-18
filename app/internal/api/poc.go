@@ -9,13 +9,13 @@ import (
 	"sync"
 
 	"github.com/Kryvea/Kryvea/internal/model"
-	"github.com/Kryvea/Kryvea/internal/poc"
 	"github.com/Kryvea/Kryvea/internal/safe"
 	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
+
+var hexColorRegex = regexp.MustCompile(`^#?[a-fA-F0-9]{6}$`)
 
 type pocData struct {
 	Index              int                     `json:"index"`
@@ -37,51 +37,26 @@ type pocData struct {
 func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 	user := c.Locals("user").(*model.User)
 
-	// parse vulnerability param
 	vulnerability, errStr := d.vulnerabilityFromParam(c.UserContext(), c.Params("vulnerability"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// get assessment from database
-	assessment, err := d.db.Assessment().GetByID(c.UserContext(), vulnerability.Assessment.ID)
-	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid vulnerability",
-		})
+	if !user.CanAccessCustomer(vulnerability.Customer.ID) {
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
-	// check if user can access the customer
-	if !user.CanAccessCustomer(assessment.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
-	}
-
-	// parse request body
 	pocsData := []pocData{}
 	pocsStr := c.FormValue("pocs")
-	err = sonic.Unmarshal([]byte(pocsStr), &pocsData)
+	err := sonic.Unmarshal([]byte(pocsStr), &pocsData)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	for i := range pocsData {
 		errStr = d.validatePocData(&pocsData[i])
 		if errStr != "" {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{
-				"error": errStr,
-			})
+			return jsonError(c, fiber.StatusBadRequest, errStr)
 		}
 	}
 
@@ -91,15 +66,14 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 	errorChan := make(chan string, len(pocsData))
 
 	wg := sync.WaitGroup{}
-	// parse image data and insert it into the database
+	// read image data in parallel; images are persisted later in the transaction
 	for i, data := range pocsData {
 		wg.Add(1)
 		go func(i int, data pocData) {
 			defer wg.Done()
-			imageID := uuid.UUID{}
 			pocImageFilename := ""
 			imageData := []byte{}
-			if data.Type == poc.PocTypeImage && data.ImageReference != "" {
+			if data.Type == model.PocTypeImage && data.ImageReference != "" {
 				imageData, pocImageFilename, err = d.formDataReadImage(c, c.UserContext(), data.ImageReference)
 				if err != nil {
 					c.Status(fiber.StatusBadRequest)
@@ -126,7 +100,6 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 				RequestHighlights:  data.RequestHighlights,
 				Response:           data.Response,
 				ResponseHighlights: data.ResponseHighlights,
-				ImageID:            imageID,
 				ImageData:          imageData,
 				ImageFilename:      pocImageFilename,
 				ImageCaption:       data.ImageCaption,
@@ -177,7 +150,6 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 			Pocs:            pocs,
 		}
 
-		// update poc in the database
 		err = d.db.Poc().Upsert(ctx, pocUpsert)
 		if err != nil {
 			return nil, errors.New("Failed to update PoC")
@@ -186,10 +158,7 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 		return nil, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	d.gcFilesAsync()
@@ -202,42 +171,22 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 func (d *Driver) GetPocsByVulnerability(c *fiber.Ctx) error {
 	user := c.Locals("user").(*model.User)
 
-	// parse vulnerability param
 	vulnerability, errStr := d.vulnerabilityFromParam(c.UserContext(), c.Params("vulnerability"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// get assessment from database
-	assessment, err := d.db.Assessment().GetByID(c.UserContext(), vulnerability.Assessment.ID)
-	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid vulnerability",
-		})
+	if !user.CanAccessCustomer(vulnerability.Customer.ID) {
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
-	if !user.CanAccessCustomer(assessment.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
-	}
-
-	// parse vulnerability param
 	poc, err := d.db.Poc().GetByVulnerabilityID(c.UserContext(), vulnerability.ID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			c.Status(fiber.StatusOK)
 			return c.JSON([]model.PocItem{})
 		}
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get PoCs",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get PoCs")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -245,11 +194,10 @@ func (d *Driver) GetPocsByVulnerability(c *fiber.Ctx) error {
 }
 
 func (d *Driver) validatePocData(data *pocData) string {
-	if !poc.IsValidType(data.Type) {
+	if !model.IsValidPocType(data.Type) {
 		return "Invalid PoC type"
 	}
 
-	hexColorRegex := regexp.MustCompile(`^#?[a-fA-F0-9]{6}$`)
 	for i, highlight := range data.RequestHighlights {
 		if highlight.Color != "" && !hexColorRegex.MatchString(highlight.Color) {
 			return fmt.Sprintf("Invalid color format for request highlight %d: %s", i, highlight.Color)
@@ -267,15 +215,15 @@ func (d *Driver) validatePocData(data *pocData) string {
 	}
 
 	switch data.Type {
-	case poc.PocTypeText:
+	case model.PocTypeText:
 		if strings.TrimSpace(data.TextData) == "" {
 			return "Text data cannot be empty"
 		}
-	case poc.PocTypeRequest:
+	case model.PocTypeRequest:
 		if strings.TrimSpace(data.Request) == "" && strings.TrimSpace(data.Response) == "" {
 			return "Request and Response cannot be both empty"
 		}
-	case poc.PocTypeImage:
+	case model.PocTypeImage:
 		if strings.TrimSpace(data.ImageReference) == "" {
 			return "Image reference cannot be empty"
 		}
@@ -283,10 +231,10 @@ func (d *Driver) validatePocData(data *pocData) string {
 		return "Invalid PoC type"
 	}
 
-	data.Description = strings.Trim(data.Description, "\r\n ")
-	data.Request = strings.Trim(data.Request, "\r\n ")
-	data.Response = strings.Trim(data.Response, "\r\n ")
-	data.TextData = strings.Trim(data.TextData, "\r\n ")
+	data.Description = strings.Trim(data.Description, trimCutset)
+	data.Request = strings.Trim(data.Request, trimCutset)
+	data.Response = strings.Trim(data.Response, trimCutset)
+	data.TextData = strings.Trim(data.TextData, trimCutset)
 
 	return ""
 }

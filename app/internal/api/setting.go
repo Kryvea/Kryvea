@@ -23,10 +23,7 @@ type settingResponseData struct {
 func (d *Driver) GetSettings(c *fiber.Ctx) error {
 	settings, err := d.db.Setting().Get(c.UserContext())
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot retrieve settings",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot retrieve settings")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -38,22 +35,14 @@ func (d *Driver) GetSettings(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateSettings(c *fiber.Ctx) error {
-	// parse request body
 	data := &settingRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	errStr := d.validateSettingData(data)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	setting := &model.Setting{
@@ -61,13 +50,9 @@ func (d *Driver) UpdateSettings(c *fiber.Ctx) error {
 		DefaultCategoryLanguage: data.DefaultCategoryLanguage,
 	}
 
-	// insert update into database
 	err := d.db.Setting().Update(c.UserContext(), setting)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot update settings",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot update settings")
 	}
 
 	c.Status(fiber.StatusCreated)

@@ -17,7 +17,6 @@ import (
 	"github.com/Kryvea/Kryvea/internal/cvss"
 	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/nessus"
-	pocpkg "github.com/Kryvea/Kryvea/internal/poc"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
@@ -52,78 +51,48 @@ func (d *Driver) ImportVulnerabilities(c *fiber.Ctx) error {
 
 	assessmentParam := c.Params("assessment")
 	if assessmentParam == "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Assessment ID is required",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Assessment ID is required")
 	}
 
 	assessmentID, err := util.ParseUUID(assessmentParam)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid assessment ID",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Invalid assessment ID")
 	}
 
 	assessment, err := d.db.Assessment().GetByID(c.UserContext(), assessmentID)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid assessment ID",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Invalid assessment ID")
 	}
 
 	if !user.CanAccessCustomer(assessment.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
-	customer, err := d.db.Customer().GetByID(c.UserContext(), assessment.Customer.ID)
-	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get customer",
-		})
-	}
+	// the assessment is fetched with its customer relation hydrated
+	customer := assessment.Customer
 
-	// parse request body
 	importData := &importRequestData{}
 	err = sonic.Unmarshal([]byte(c.FormValue("import_data")), &importData)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
 	data, _, err := d.formDataReadFile(c, "file")
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot read file",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot read file")
 	}
 
 	var parseErr error
 	switch importData.Source {
 	case model.SourceBurp:
-		parseErr = d.ParseBurp(c.UserContext(), data, *customer, *assessment, user.ID)
+		parseErr = d.parseBurp(c.UserContext(), data, customer, *assessment, user.ID)
 	case model.SourceNessus:
-		parseErr = d.ParseNessus(c.UserContext(), data, *customer, *assessment, user.ID)
+		parseErr = d.parseNessus(c.UserContext(), data, customer, *assessment, user.ID)
 	default:
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Unsupported source",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Unsupported source")
 	}
 	if parseErr != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": fmt.Sprintf("Cannot parse: %v", parseErr),
-		})
+		return jsonError(c, fiber.StatusBadRequest, fmt.Sprintf("Cannot parse: %v", parseErr))
 	}
 
 	c.Status(fiber.StatusCreated)
@@ -132,13 +101,35 @@ func (d *Driver) ImportVulnerabilities(c *fiber.Ctx) error {
 	})
 }
 
-func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Customer, assessment model.Assessment, userID uuid.UUID) (err error) {
+// decodeBurpBody returns the raw body of a burp message part, decoding it
+// from base64 when the export flags it as encoded.
+func decodeBurpBody(content *burp.Base64Content, what string) ([]byte, error) {
+	if content == nil {
+		return nil, nil
+	}
+	if content.Base64 == "true" {
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(content.Body))
+		if err != nil {
+			return nil, fmt.Errorf("cannot decode %s: %w", what, err)
+		}
+		return decoded, nil
+	}
+	return []byte(content.Body), nil
+}
+
+func (d *Driver) parseBurp(ctx context.Context, data []byte, customer model.Customer, assessment model.Assessment, userID uuid.UUID) (err error) {
 	burpData, err := burp.Parse(data)
 	if err != nil {
 		return err
 	}
 
 	_, err = d.db.RunInTx(ctx, func(ctx context.Context) (any, error) {
+		targetCache := make(map[string]uuid.UUID)
+		categoryCache := make(map[string]uuid.UUID)
+
+		vulns := make([]*model.Vulnerability, 0, len(burpData.Issues))
+		pocs := make([]model.Poc, 0, len(burpData.Issues))
+
 		for _, issue := range burpData.Issues {
 			var hostFQDN, protocol string
 			var port int
@@ -165,19 +156,21 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 					target.IPv6 = ""
 				}
 			}
-			targetID, _, err := d.db.Target().FirstOrInsert(ctx, target, customer.ID)
-			if err != nil {
-				return nil, err
-			}
 
-			err = d.db.Assessment().UpdateTargets(ctx, assessment.ID, targetID)
-			if err != nil {
-				return nil, err
+			// cache targets on the same fields FirstOrInsert matches on
+			targetKey := fmt.Sprintf("%s|%s|%s|%d|%s", target.IPv4, target.IPv6, target.FQDN, target.Port, target.Protocol)
+			targetID, ok := targetCache[targetKey]
+			if !ok {
+				targetID, _, err = d.db.Target().FirstOrInsert(ctx, target, customer.ID)
+				if err != nil {
+					return nil, err
+				}
+				targetCache[targetKey] = targetID
 			}
 
 			category := &model.Category{
-				Identifier:         dropNA(strings.Trim(issue.Type, "\r\n ")),
-				Name:               dropNA(strings.Trim(issue.Name, "\r\n ")),
+				Identifier:         dropNA(strings.Trim(issue.Type, trimCutset)),
+				Name:               dropNA(strings.Trim(issue.Name, trimCutset)),
 				Subcategory:        "",
 				GenericDescription: map[string]string{"en": dropNA(htmlToText(issue.IssueBackground))},
 				GenericRemediation: map[string]string{"en": dropNA(htmlToText(issue.RemediationBackground))},
@@ -185,9 +178,16 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				References:         htmlToRefs(issue.VulnerabilityClassifications),
 				Source:             model.SourceBurp,
 			}
-			categoryID, _, err := d.db.Category().FirstOrInsert(ctx, category)
-			if err != nil {
-				return nil, err
+
+			// cache categories on the same fields FirstOrInsert matches on
+			catKey := fmt.Sprintf("%s|%s|%s", category.Identifier, category.Name, category.Subcategory)
+			categoryID, ok := categoryCache[catKey]
+			if !ok {
+				categoryID, _, err = d.db.Category().FirstOrInsert(ctx, category)
+				if err != nil {
+					return nil, err
+				}
+				categoryCache[catKey] = categoryID
 			}
 
 			vulnerability := &model.Vulnerability{
@@ -200,7 +200,7 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				CVSSv3:      cvss.InfoVector3,
 				CVSSv31:     cvss.InfoVector31,
 				CVSSv4:      cvss.InfoVector4,
-				Status:      strings.Trim(model.VulnerabilityStatusOpen, "\r\n "),
+				Status:      model.VulnerabilityStatusOpen,
 				References:  htmlToRefs(issue.References),
 				Description: dropNA(htmlToText(issue.IssueDetail)),
 				Remediation: dropNA(htmlToText(issue.RemediationDetail)),
@@ -233,43 +233,27 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 				}
 				vulnerability.CVSSv31 = *vector
 			}
-			vulnerabilityID, err := d.db.Vulnerability().Insert(ctx, vulnerability)
-			if err != nil {
-				return nil, err
-			}
 
 			items := len(issue.RequestResponses) + len(issue.CollaboratorEvents) + len(issue.InfiltratorEvents)
 			poc := model.Poc{
-				VulnerabilityID: vulnerabilityID,
-				Pocs:            make([]model.PocItem, 0, items),
+				Pocs: make([]model.PocItem, 0, items),
 			}
 			i := 0
 			for _, requestResponse := range issue.RequestResponses {
-				var request, response []byte
-				if requestResponse.Request != nil {
-					request = []byte(requestResponse.Request.Body)
-					if requestResponse.Request.Base64 == "true" {
-						request, err = base64.StdEncoding.DecodeString(strings.TrimSpace(requestResponse.Request.Body))
-						if err != nil {
-							return nil, fmt.Errorf("cannot decode request: %w", err)
-						}
-					}
+				request, err := decodeBurpBody(requestResponse.Request, "request")
+				if err != nil {
+					return nil, err
 				}
-				if requestResponse.Response != nil {
-					response = []byte(requestResponse.Response.Body)
-					if requestResponse.Response.Base64 == "true" {
-						response, err = base64.StdEncoding.DecodeString(strings.TrimSpace(requestResponse.Response.Body))
-						if err != nil {
-							return nil, fmt.Errorf("cannot decode response: %w", err)
-						}
-					}
+				response, err := decodeBurpBody(requestResponse.Response, "response")
+				if err != nil {
+					return nil, err
 				}
 
 				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index:    i,
-					Type:     pocpkg.PocTypeRequest,
-					Request:  strings.Trim(string(request), "\r\n "),
-					Response: strings.Trim(string(response), "\r\n "),
+					Type:     model.PocTypeRequest,
+					Request:  strings.Trim(string(request), trimCutset),
+					Response: strings.Trim(string(response), trimCutset),
 				})
 
 				i++
@@ -277,29 +261,19 @@ func (d *Driver) ParseBurp(ctx context.Context, data []byte, customer model.Cust
 			for _, collaboratorEvent := range issue.CollaboratorEvents {
 				var request, response []byte
 				if collaboratorEvent.RequestResponse != nil {
-					if collaboratorEvent.RequestResponse.Request != nil {
-						request = []byte(collaboratorEvent.RequestResponse.Request.Body)
-						if collaboratorEvent.RequestResponse.Request.Base64 == "true" {
-							request, err = base64.StdEncoding.DecodeString(strings.TrimSpace(collaboratorEvent.RequestResponse.Request.Body))
-							if err != nil {
-								return nil, fmt.Errorf("cannot decode request: %w", err)
-							}
-						}
+					request, err = decodeBurpBody(collaboratorEvent.RequestResponse.Request, "request")
+					if err != nil {
+						return nil, err
 					}
-					if collaboratorEvent.RequestResponse.Response != nil {
-						response = []byte(collaboratorEvent.RequestResponse.Response.Body)
-						if collaboratorEvent.RequestResponse.Response.Base64 == "true" {
-							response, err = base64.StdEncoding.DecodeString(strings.TrimSpace(collaboratorEvent.RequestResponse.Response.Body))
-							if err != nil {
-								return nil, fmt.Errorf("cannot decode response: %w", err)
-							}
-						}
+					response, err = decodeBurpBody(collaboratorEvent.RequestResponse.Response, "response")
+					if err != nil {
+						return nil, err
 					}
 				}
 
 				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index: i,
-					Type:  pocpkg.PocTypeText,
+					Type:  model.PocTypeText,
 					TextData: fmt.Sprintf(`Interaction Type: %s
 Origin IP: %s
 Time: %s
@@ -311,8 +285,8 @@ Lookup Host: %s`,
 						collaboratorEvent.LookupType,
 						collaboratorEvent.LookupHost,
 					),
-					Request:  strings.Trim(string(request), "\r\n "),
-					Response: strings.Trim(string(response), "\r\n "),
+					Request:  strings.Trim(string(request), trimCutset),
+					Response: strings.Trim(string(response), trimCutset),
 				})
 
 				i++
@@ -320,7 +294,7 @@ Lookup Host: %s`,
 			for _, infiltratorEvent := range issue.InfiltratorEvents {
 				poc.Pocs = append(poc.Pocs, model.PocItem{
 					Index: i,
-					Type:  pocpkg.PocTypeText,
+					Type:  model.PocTypeText,
 					TextData: fmt.Sprintf(`Parameter Name: %s
 Platform: %s
 Signature: %s
@@ -337,19 +311,33 @@ Parameter Value: %s`,
 				i++
 			}
 
-			err = d.db.Poc().Upsert(ctx, &poc)
-			if err != nil {
-				return nil, err
-			}
+			vulns = append(vulns, vulnerability)
+			pocs = append(pocs, poc)
 		}
 
-		return nil, nil
+		if err := d.db.Vulnerability().BulkInsert(ctx, vulns); err != nil {
+			return nil, err
+		}
+
+		for i := range pocs {
+			pocs[i].VulnerabilityID = vulns[i].ID
+		}
+
+		if err := d.db.Poc().BulkInsertNew(ctx, pocs); err != nil {
+			return nil, err
+		}
+
+		uniqueTargetIDs := make([]uuid.UUID, 0, len(targetCache))
+		for _, id := range targetCache {
+			uniqueTargetIDs = append(uniqueTargetIDs, id)
+		}
+		return nil, d.db.Assessment().BulkUpdateTargets(ctx, assessment.ID, uniqueTargetIDs)
 	})
 
 	return err
 }
 
-func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Customer, assessment model.Assessment, userID uuid.UUID) (err error) {
+func (d *Driver) parseNessus(ctx context.Context, data []byte, customer model.Customer, assessment model.Assessment, userID uuid.UUID) (err error) {
 	nessusData, err := nessus.Parse(data)
 	if err != nil {
 		return err
@@ -415,12 +403,16 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 					targetCache[targetKey] = targetID
 				}
 
-				catKey := item.PluginID
+				// cache categories on the same fields FirstOrInsert matches on
+				// (identifier, name, subcategory - always empty for nessus)
+				identifier := dropNA(strings.Trim(item.PluginID, trimCutset))
+				name := dropNA(strings.Trim(item.PluginName, trimCutset))
+				catKey := identifier + "|" + name + "|"
 				categoryID, ok := categoryCache[catKey]
 				if !ok {
 					category := &model.Category{
-						Identifier:         dropNA(strings.Trim(item.PluginID, "\r\n ")),
-						Name:               dropNA(strings.Trim(item.PluginName, "\r\n ")),
+						Identifier:         identifier,
+						Name:               name,
 						GenericDescription: map[string]string{"en": dropNA(nessusToText(item.Description))},
 						GenericRemediation: map[string]string{"en": dropNA(nessusToText(item.Solution))},
 						LanguagesOrder:     []string{"en"},
@@ -472,7 +464,7 @@ func (d *Driver) ParseNessus(ctx context.Context, data []byte, customer model.Cu
 					Pocs: []model.PocItem{{
 						Type:         "text",
 						TextLanguage: "plaintext",
-						TextData:     dropNA(strings.Trim(item.PluginOutput, "\r\n ")),
+						TextData:     dropNA(strings.Trim(item.PluginOutput, trimCutset)),
 					}},
 				})
 				vulns = append(vulns, vuln)

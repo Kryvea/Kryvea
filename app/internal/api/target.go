@@ -31,22 +31,17 @@ type targetBulkRequest struct {
 func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 	user := c.Locals("user").(*model.User)
 
-	// parse request body
 	data := &targetBulkRequest{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{"error": "Cannot parse JSON"})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// check if user has access to customer
 	customer, errStr := d.customerFromParam(c.UserContext(), data.CustomerID)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{"error": errStr})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 	if !user.CanAccessCustomer(customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{"error": "Forbidden"})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
 	// if assessment is not empty retrieve it from database
@@ -54,16 +49,13 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 	if data.AssessmentID != "" {
 		assessment, errStr = d.assessmentFromParam(c.UserContext(), data.AssessmentID)
 		if errStr != "" {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{"error": errStr})
+			return jsonError(c, fiber.StatusBadRequest, errStr)
 		}
 	}
 
-	// validate data
 	for i := range data.Upsert {
 		if errStr := d.validateTargetItem(&data.Upsert[i]); errStr != "" {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{"error": errStr})
+			return jsonError(c, fiber.StatusBadRequest, errStr)
 		}
 	}
 
@@ -71,8 +63,7 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 	for _, raw := range data.Delete {
 		id, err := util.ParseUUID(raw)
 		if err != nil {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{"error": "Invalid target ID"})
+			return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
 		}
 		deleteIDs = append(deleteIDs, id)
 	}
@@ -84,8 +75,7 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 		}
 		id, err := util.ParseUUID(item.ID)
 		if err != nil {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{"error": "Invalid target ID"})
+			return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
 		}
 		updateIDs = append(updateIDs, id)
 	}
@@ -94,8 +84,7 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 	if len(referencedIDs) > 0 {
 		found, err := d.db.Target().ExistingIDsForCustomer(c.UserContext(), referencedIDs, customer.ID)
 		if err != nil {
-			c.Status(fiber.StatusInternalServerError)
-			return c.JSON(fiber.Map{"error": "Cannot validate targets"})
+			return jsonError(c, fiber.StatusInternalServerError, "Cannot validate targets")
 		}
 		allowed := make(map[uuid.UUID]struct{}, len(found))
 		for _, id := range found {
@@ -103,8 +92,7 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 		}
 		for _, id := range referencedIDs {
 			if _, ok := allowed[id]; !ok {
-				c.Status(fiber.StatusBadRequest)
-				return c.JSON(fiber.Map{"error": "Invalid target ID"})
+				return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
 			}
 		}
 	}
@@ -153,8 +141,7 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 		return inserted, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{"error": err.Error()})
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	c.Status(fiber.StatusOK)
@@ -167,22 +154,18 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 func (d *Driver) GetTargetsByCustomer(c *fiber.Ctx) error {
 	user := c.Locals("user").(*model.User)
 
-	// check if user has access to customer
 	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{"error": errStr})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	if !user.CanAccessCustomer(customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{"error": "Forbidden"})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
 	targets, err := d.db.Target().Search(c.UserContext(), customer.ID, c.Query("search"))
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{"error": "Cannot get targets"})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get targets")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -192,29 +175,23 @@ func (d *Driver) GetTargetsByCustomer(c *fiber.Ctx) error {
 func (d *Driver) GetTarget(c *fiber.Ctx) error {
 	user := c.Locals("user").(*model.User)
 
-	// parse target param
 	targetParam := c.Params("target")
 	if targetParam == "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{"error": "Target ID is required"})
+		return jsonError(c, fiber.StatusBadRequest, "Target ID is required")
 	}
 
 	targetID, err := util.ParseUUID(targetParam)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{"error": "Invalid target ID"})
+		return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
 	}
 
-	// get target by customer and ID from database
 	target, err := d.db.Target().GetByIDWithRelations(c.UserContext(), targetID)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{"error": "Cannot get target"})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get target")
 	}
 
 	if !user.CanAccessCustomer(target.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{"error": "Forbidden"})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -222,21 +199,7 @@ func (d *Driver) GetTarget(c *fiber.Ctx) error {
 }
 
 func (d *Driver) targetFromParam(ctx context.Context, targetParam string) (*model.Target, string) {
-	if targetParam == "" {
-		return nil, "Target ID is required"
-	}
-
-	targetID, err := util.ParseUUID(targetParam)
-	if err != nil {
-		return nil, "Invalid target ID"
-	}
-
-	target, err := d.db.Target().GetByIDWithRelations(ctx, targetID)
-	if err != nil {
-		return nil, "Invalid target ID"
-	}
-
-	return target, ""
+	return fromParam(ctx, targetParam, "Target", d.db.Target().GetByIDWithRelations)
 }
 
 func (d *Driver) validateTargetItem(data *targetUpsertItem) string {

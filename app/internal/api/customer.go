@@ -7,10 +7,10 @@ import (
 
 	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/store"
-	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/valyala/fasthttp"
 )
 
 type customerRequestData struct {
@@ -20,37 +20,34 @@ type customerRequestData struct {
 }
 
 func (d *Driver) AddCustomer(c *fiber.Ctx) error {
-	// parse request body
 	data := &customerRequestData{}
 	dataStr := c.FormValue("data")
-	err := sonic.Unmarshal([]byte(dataStr), &data)
+	err := sonic.Unmarshal([]byte(dataStr), data)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	errStr := d.validateCustomerData(data)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	customerID, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		var logoId uuid.UUID
 		var mime string
 		logoData, _, err := d.formDataReadImage(c, ctx, "file")
-		if err == store.ErrFileSizeTooLarge {
-			return uuid.Nil, errors.New("Image file size is too large")
+		if err != nil && !errors.Is(err, fasthttp.ErrMissingFile) {
+			// the logo is optional: a missing file is fine, anything else is reported
+			if errors.Is(err, store.ErrFileSizeTooLarge) {
+				return uuid.Nil, errors.New("Image file size is too large")
+			}
+			if errors.Is(err, store.ErrImageTypeNotAllowed) {
+				return uuid.Nil, errors.New("Image type is not allowed")
+			}
+
+			return uuid.Nil, errors.New("Error reading form file")
 		}
-		if err == store.ErrImageTypeNotAllowed {
-			return uuid.Nil, errors.New("Image type is not allowed")
-		}
-		if len(logoData) > 0 && err == nil {
+		if err == nil && len(logoData) > 0 {
 			logoId, mime, err = d.db.FileReference().Insert(ctx, logoData)
 			if err != nil {
 				d.logger.Error().Err(err).Msg("Cannot upload image")
@@ -65,7 +62,6 @@ func (d *Driver) AddCustomer(c *fiber.Ctx) error {
 			LogoMimeType: mime,
 		}
 
-		// insert customer into database
 		customerID, err := d.db.Customer().Insert(ctx, customer)
 		if err != nil {
 			if errors.Is(err, store.ErrDuplicateKey) {
@@ -90,10 +86,7 @@ func (d *Driver) AddCustomer(c *fiber.Ctx) error {
 		return customerID, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	c.Status(fiber.StatusCreated)
@@ -106,21 +99,13 @@ func (d *Driver) AddCustomer(c *fiber.Ctx) error {
 func (d *Driver) GetCustomer(c *fiber.Ctx) error {
 	user := c.Locals("user").(*model.User)
 
-	// get customer from param
 	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// check if user has access to the customer
 	if !user.CanAccessCustomer(customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -130,22 +115,11 @@ func (d *Driver) GetCustomer(c *fiber.Ctx) error {
 func (d *Driver) GetCustomers(c *fiber.Ctx) error {
 	user := c.Locals("user").(*model.User)
 
-	// retrieve user's customers
-	userCustomers := []uuid.UUID{}
-	for _, uc := range user.Customers {
-		userCustomers = append(userCustomers, uc.ID)
-	}
-	if user.Role == model.RoleAdmin {
-		userCustomers = nil
-	}
+	userCustomers := userCustomerIDs(user)
 
-	// get customers from database
 	customers, err := d.db.Customer().GetAll(c.UserContext(), userCustomers)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get customers",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get customers")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -153,31 +127,19 @@ func (d *Driver) GetCustomers(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateCustomer(c *fiber.Ctx) error {
-	// parse customer param
 	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// parse request body
 	data := &customerRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	errStr = d.validateCustomerData(data)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	newCustomer := &model.Customer{
@@ -185,20 +147,13 @@ func (d *Driver) UpdateCustomer(c *fiber.Ctx) error {
 		Language: data.Language,
 	}
 
-	// update customer in database
 	err := d.db.Customer().Update(c.UserContext(), customer.ID, newCustomer)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-
 		if errors.Is(err, store.ErrDuplicateKey) {
-			return c.JSON(fiber.Map{
-				"error": fmt.Sprintf("Customer \"%s\" already exists", newCustomer.Name),
-			})
+			return jsonError(c, fiber.StatusBadRequest, fmt.Sprintf("Customer \"%s\" already exists", newCustomer.Name))
 		}
 
-		return c.JSON(fiber.Map{
-			"error": "Cannot update customer",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot update customer")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -208,22 +163,18 @@ func (d *Driver) UpdateCustomer(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateCustomerLogo(c *fiber.Ctx) error {
-	// parse customer param
 	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	_, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		logoData, _, err := d.formDataReadImage(c, ctx, "file")
 		if err != nil {
-			if err == store.ErrFileSizeTooLarge {
+			if errors.Is(err, store.ErrFileSizeTooLarge) {
 				return uuid.Nil, errors.New("Image file size is too large")
 			}
-			if err == store.ErrImageTypeNotAllowed {
+			if errors.Is(err, store.ErrImageTypeNotAllowed) {
 				return uuid.Nil, errors.New("Image type is not allowed")
 			}
 
@@ -239,7 +190,6 @@ func (d *Driver) UpdateCustomerLogo(c *fiber.Ctx) error {
 			}
 		}
 
-		// update customer in database
 		err = d.db.Customer().UpdateLogo(ctx, customer.ID, logoId, mime)
 		if err != nil {
 			return nil, errors.New("Cannot update customer")
@@ -248,10 +198,7 @@ func (d *Driver) UpdateCustomerLogo(c *fiber.Ctx) error {
 		return nil, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	d.gcFilesAsync()
@@ -262,21 +209,14 @@ func (d *Driver) UpdateCustomerLogo(c *fiber.Ctx) error {
 }
 
 func (d *Driver) DeleteCustomer(c *fiber.Ctx) error {
-	// parse customer param
 	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	if err := d.db.Customer().Delete(c.UserContext(), customer.ID); err != nil {
 		d.logger.Error().Err(err).Msg("Cannot delete customer")
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot delete customer",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot delete customer")
 	}
 
 	d.gcFilesAsync()
@@ -287,21 +227,7 @@ func (d *Driver) DeleteCustomer(c *fiber.Ctx) error {
 }
 
 func (d *Driver) customerFromParam(ctx context.Context, customerParam string) (*model.Customer, string) {
-	if customerParam == "" {
-		return nil, "Customer ID is required"
-	}
-
-	customerID, err := util.ParseUUID(customerParam)
-	if err != nil {
-		return nil, "Invalid customer ID"
-	}
-
-	customer, err := d.db.Customer().GetByIDWithRelations(ctx, customerID)
-	if err != nil {
-		return nil, "Invalid customer ID"
-	}
-
-	return customer, ""
+	return fromParam(ctx, customerParam, "Customer", d.db.Customer().GetByIDWithRelations)
 }
 
 func (d *Driver) validateCustomerData(customer *customerRequestData) string {
