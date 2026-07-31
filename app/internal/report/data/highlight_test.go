@@ -1,6 +1,7 @@
 package reportdata
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Kryvea/Kryvea/internal/model"
@@ -164,5 +165,37 @@ func TestHighlight(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Malformed coordinates (the API validates only the color) must be clamped, not
+// panic, and always partition the full text.
+func TestHighlightOutOfRange(t *testing.T) {
+	text := "first line here\nsecond line here\nthird line here"
+
+	cases := []struct {
+		text      string
+		highlight model.HighlightedText
+	}{
+		{text, model.HighlightedText{Start: model.LineCol{Line: 0, Col: 1}, End: model.LineCol{Line: 1, Col: 5}, Color: "FF0000"}},
+		{text, model.HighlightedText{Start: model.LineCol{Line: 1, Col: -3}, End: model.LineCol{Line: 2, Col: 4}, Color: "FF0000"}},
+		{text, model.HighlightedText{Start: model.LineCol{Line: 1, Col: 0}, End: model.LineCol{Line: 1, Col: 0}, Color: "FF0000"}},
+		{text, model.HighlightedText{Start: model.LineCol{Line: 5, Col: 1}, End: model.LineCol{Line: 9, Col: 2}, Color: "FF0000"}},
+		{text, model.HighlightedText{Start: model.LineCol{Line: 3, Col: 1}, End: model.LineCol{Line: 1, Col: 1}, Color: "FF0000"}},
+		// trailing newline yields an empty last row: columns must clamp to it
+		{"abc\n", model.HighlightedText{Start: model.LineCol{Line: 2, Col: 2}, End: model.LineCol{Line: 2, Col: 3}, Color: "FF0000"}},
+		{"abc\n", model.HighlightedText{Start: model.LineCol{Line: 1, Col: 2}, End: model.LineCol{Line: 2, Col: 9}, Color: "FF0000"}},
+	}
+
+	for i, tc := range cases {
+		segments := splitText(tc.text, []model.HighlightedText{tc.highlight})
+
+		var reassembled strings.Builder
+		for _, segment := range segments {
+			reassembled.WriteString(segment.Text)
+		}
+		if reassembled.String() != tc.text {
+			t.Errorf("case %d: reassembled text %q, want %q", i, reassembled.String(), tc.text)
+		}
 	}
 }

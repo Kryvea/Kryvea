@@ -20,59 +20,62 @@ func splitText(s string, coordinates []model.HighlightedText) []model.Highlighte
 	colors := make([][]string, len(rows))
 	for i := range colors {
 		colors[i] = make([]string, len(rows[i]))
-		for j := range len(rows[i]) {
-			colors[i][j] = ""
-		}
 	}
 
-	modified := true
-	for modified {
-		for i := 0; i < len(coordinates); i++ {
-			modified = false
-			if coordinates[i].Start.Line > len(rows) {
-				copy(coordinates[i:], coordinates[i+1:])
-				continue
-			}
-			if coordinates[i].End.Line > len(rows) {
-				coordinates[i].End.Line = len(rows)
-				coordinates[i].End.Col = len(rows[coordinates[i].End.Line-1])
-			}
-			if coordinates[i].Start.Line != coordinates[i].End.Line {
-				coordinates = append(coordinates, model.HighlightedText{})
-				first, second := coordinates[i], coordinates[i]
-
-				first.End.Line = first.Start.Line
-				first.End.Col = len(rows[first.End.Line-1]) + 1
-
-				second.Start.Line++
-				second.Start.Col = 1
-
-				copy(coordinates[i+2:], coordinates[i+1:])
-				coordinates[i] = first
-				coordinates[i+1] = second
-				modified = true
-
-				continue
-			}
-			if coordinates[i].Start.Col > len(rows[coordinates[i].Start.Line-1]) {
-				coordinates[i].Start.Col = len(rows[coordinates[i].Start.Line-1])
-			}
-			if coordinates[i].Start.Col < 0 {
-				coordinates[i].Start.Col = 1
-			}
-			if coordinates[i].End.Col > len(rows[coordinates[i].End.Line-1]) {
-				coordinates[i].End.Col = len(rows[coordinates[i].End.Line-1])
-				if !strings.HasSuffix(rows[coordinates[i].End.Line-1], "\n") {
-					coordinates[i].End.Col++
-				}
-			}
-			if coordinates[i].End.Col < 0 {
-				coordinates[i].End.Col = 1
-			}
-		}
-	}
-
+	// Split multi-line highlights into one single-line segment per row, guarding
+	// every line/column bound so out-of-range coordinates never index colors out of bounds.
+	normalized := make([]model.HighlightedText, 0, len(coordinates))
 	for _, coordinate := range coordinates {
+		if coordinate.Start.Line < 1 || coordinate.Start.Line > len(rows) {
+			continue
+		}
+		if coordinate.End.Line > len(rows) {
+			coordinate.End.Line = len(rows)
+			coordinate.End.Col = len(rows[coordinate.End.Line-1])
+		}
+
+		for coordinate.Start.Line != coordinate.End.Line {
+			if coordinate.Start.Line > len(rows) {
+				break
+			}
+			segment := coordinate
+			segment.End.Line = segment.Start.Line
+			if segment.Start.Col < 1 {
+				segment.Start.Col = 1
+			}
+			segment.End.Col = len(rows[segment.Start.Line-1]) + 1
+			normalized = append(normalized, segment)
+
+			coordinate.Start.Line++
+			coordinate.Start.Col = 1
+		}
+		if coordinate.Start.Line > len(rows) {
+			continue
+		}
+
+		// upper bound first: on an empty row len(row) is 0 and the lower
+		// bound must win, or the paint loop would index colors[row][-1]
+		row := rows[coordinate.Start.Line-1]
+		if coordinate.Start.Col > len(row) {
+			coordinate.Start.Col = len(row)
+		}
+		if coordinate.Start.Col < 1 {
+			coordinate.Start.Col = 1
+		}
+		if coordinate.End.Col > len(row) {
+			coordinate.End.Col = len(row)
+			if !strings.HasSuffix(row, "\n") {
+				coordinate.End.Col++
+			}
+		}
+		if coordinate.End.Col < 1 {
+			coordinate.End.Col = 1
+		}
+
+		normalized = append(normalized, coordinate)
+	}
+
+	for _, coordinate := range normalized {
 		for i := coordinate.Start.Col; i < coordinate.End.Col; i++ {
 			colors[coordinate.Start.Line-1][i-1] = coordinate.Color
 		}

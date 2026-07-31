@@ -39,27 +39,34 @@ func (rd *ReportData) Prepare(sortByCvss string) {
 		maxVersion = util.GetMaxCvssVersion(rd.Assessment.CVSSVersions)
 	}
 
-	// sanitize customer
 	SanitizeCustomer(rd.Customer)
 
-	// sanitize assessment
 	SanitizeAssessment(rd.Assessment)
 
-	// sanitize and sort vulnerabilities
 	SanitizeAndSortVulnerabilities(rd.Vulnerabilities, maxVersion, rd.Assessment.Language)
 
-	// get max cvss
 	rd.MaxCVSS = GetMaxCvss(rd.Vulnerabilities, rd.Assessment.CVSSVersions)
 
 	rd.VulnerabilitiesOverview = getVulnerabilitiesOverview(rd.Vulnerabilities, rd.Assessment.CVSSVersions)
 
-	rd.TargetsCategoryCounter = getTargetsCategoryCounter(rd.Vulnerabilities, maxVersion)
+	rd.TargetsCategoryCounter = getTargetTagCounter(rd.Vulnerabilities, maxVersion)
 
 	rd.OWASPCounter = getOWASPCounter(rd.Vulnerabilities, maxVersion)
 
-	// parse pocitem Highlights
 	parseHighlights(rd.Vulnerabilities)
 
-	// aggregate vulnerabilities
 	rd.AggregatedVulnerabilities = aggregateVulnerabilities(rd.Vulnerabilities)
+}
+
+// PrepareJSON sorts and computes MaxCVSS for a JSON export. Unlike Prepare it
+// does no XML escaping, so serialized text stays verbatim.
+func (rd *ReportData) PrepareJSON(sortByCvss string) {
+	maxVersion := sortByCvss
+	if maxVersion == "" {
+		maxVersion = util.GetMaxCvssVersion(rd.Assessment.CVSSVersions)
+	}
+
+	SortVulnerabilities(rd.Vulnerabilities, maxVersion)
+
+	rd.MaxCVSS = GetMaxCvss(rd.Vulnerabilities, rd.Assessment.CVSSVersions)
 }

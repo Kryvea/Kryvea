@@ -5,32 +5,34 @@ import (
 	"github.com/Kryvea/Kryvea/internal/model"
 )
 
+// vectorFor returns the vulnerability's CVSS vector for the given version.
+// Unknown versions yield the zero Vector.
+func vectorFor(vulnerability *model.Vulnerability, version string) cvss.Vector {
+	switch version {
+	case cvss.Cvss2:
+		return vulnerability.CVSSv2
+	case cvss.Cvss3:
+		return vulnerability.CVSSv3
+	case cvss.Cvss31:
+		return vulnerability.CVSSv31
+	case cvss.Cvss4:
+		return vulnerability.CVSSv4
+	}
+
+	return cvss.Vector{}
+}
+
 func GetMaxCvss(vulnerabilities []model.Vulnerability, cvssVersions map[string]bool) map[string]cvss.Vector {
 	maxCvss := make(map[string]cvss.Vector)
 
-	for _, vulnerability := range vulnerabilities {
+	for i := range vulnerabilities {
 		for version, enabled := range cvssVersions {
 			if !enabled {
 				continue
 			}
 
-			switch version {
-			case cvss.Cvss2:
-				if vulnerability.CVSSv2.Score > maxCvss[version].Score {
-					maxCvss[version] = vulnerability.CVSSv2
-				}
-			case cvss.Cvss3:
-				if vulnerability.CVSSv3.Score > maxCvss[version].Score {
-					maxCvss[version] = vulnerability.CVSSv3
-				}
-			case cvss.Cvss31:
-				if vulnerability.CVSSv31.Score > maxCvss[version].Score {
-					maxCvss[version] = vulnerability.CVSSv31
-				}
-			case cvss.Cvss4:
-				if vulnerability.CVSSv4.Score > maxCvss[version].Score {
-					maxCvss[version] = vulnerability.CVSSv4
-				}
+			if vector := vectorFor(&vulnerabilities[i], version); vector.Score > maxCvss[version].Score {
+				maxCvss[version] = vector
 			}
 		}
 	}
@@ -48,50 +50,33 @@ func getVulnerabilitiesOverview(vulnerabilities []model.Vulnerability, cvssVersi
 		}
 	}
 
-	for _, vulnerability := range vulnerabilities {
+	for i := range vulnerabilities {
 		for _, version := range cvss.CvssVersions {
-			if vulnerabilityOverview[version] == nil {
-				vulnerabilityOverview[version] = make(map[string]uint)
-				for _, severity := range cvss.CvssSeverities {
-					vulnerabilityOverview[version][severity] = 0
-				}
-			}
-
 			if !cvssVersions[version] {
 				continue
 			}
 
-			switch version {
-			case cvss.Cvss2:
-				vulnerabilityOverview[version][vulnerability.CVSSv2.Severity] += 1
-			case cvss.Cvss3:
-				vulnerabilityOverview[version][vulnerability.CVSSv3.Severity] += 1
-			case cvss.Cvss31:
-				vulnerabilityOverview[version][vulnerability.CVSSv31.Severity] += 1
-			case cvss.Cvss4:
-				vulnerabilityOverview[version][vulnerability.CVSSv4.Severity] += 1
-			}
+			vulnerabilityOverview[version][vectorFor(&vulnerabilities[i], version).Severity] += 1
 		}
 	}
 
 	return vulnerabilityOverview
 }
 
-func getTargetsCategoryCounter(vulnerabilities []model.Vulnerability, maxVersion string) map[string]uint {
-	targetsCategoryCounter := make(map[string]uint)
+// getTargetTagCounter counts, per Target.Tag, the vulnerabilities whose
+// severity for maxVersion is not "None".
+func getTargetTagCounter(vulnerabilities []model.Vulnerability, maxVersion string) map[string]uint {
+	targetTagCounter := make(map[string]uint)
 
-	for _, vulnerability := range vulnerabilities {
-		if (maxVersion == cvss.Cvss2 && vulnerability.CVSSv2.Severity == cvss.CvssSeverityNone) ||
-			(maxVersion == cvss.Cvss3 && vulnerability.CVSSv3.Severity == cvss.CvssSeverityNone) ||
-			(maxVersion == cvss.Cvss31 && vulnerability.CVSSv31.Severity == cvss.CvssSeverityNone) ||
-			(maxVersion == cvss.Cvss4 && vulnerability.CVSSv4.Severity == cvss.CvssSeverityNone) {
+	for i := range vulnerabilities {
+		if vectorFor(&vulnerabilities[i], maxVersion).Severity == cvss.CvssSeverityNone {
 			continue
 		}
 
-		targetsCategoryCounter[vulnerability.Target.Tag] += 1
+		targetTagCounter[vulnerabilities[i].Target.Tag] += 1
 	}
 
-	return targetsCategoryCounter
+	return targetTagCounter
 }
 
 func getOWASPCounter(vulnerabilities []model.Vulnerability, maxVersion string) map[string]OWASPCounter {
@@ -99,7 +84,8 @@ func getOWASPCounter(vulnerabilities []model.Vulnerability, maxVersion string) m
 
 	highestSeverityByCategoryType := make(map[string]float64)
 
-	for _, vulnerability := range vulnerabilities {
+	for i := range vulnerabilities {
+		vulnerability := &vulnerabilities[i]
 		if _, ok := owaspCounter[vulnerability.Category.Source]; !ok {
 			owaspCounter[vulnerability.Category.Source] = OWASPCounter{
 				Categories: make(map[string]string),
@@ -109,27 +95,10 @@ func getOWASPCounter(vulnerabilities []model.Vulnerability, maxVersion string) m
 			counter := owaspCounter[vulnerability.Category.Source]
 			counter.Total += 1
 
-			switch maxVersion {
-			case cvss.Cvss2:
-				if vulnerability.CVSSv2.Score > highestSeverityByCategoryType[vulnerability.Category.Identifier] {
-					highestSeverityByCategoryType[vulnerability.Category.Identifier] = vulnerability.CVSSv2.Score
-					counter.Categories[vulnerability.Category.Identifier] = severityColors[vulnerability.CVSSv2.Severity]
-				}
-			case cvss.Cvss3:
-				if vulnerability.CVSSv3.Score > highestSeverityByCategoryType[vulnerability.Category.Identifier] {
-					highestSeverityByCategoryType[vulnerability.Category.Identifier] = vulnerability.CVSSv3.Score
-					counter.Categories[vulnerability.Category.Identifier] = severityColors[vulnerability.CVSSv3.Severity]
-				}
-			case cvss.Cvss31:
-				if vulnerability.CVSSv31.Score > highestSeverityByCategoryType[vulnerability.Category.Identifier] {
-					highestSeverityByCategoryType[vulnerability.Category.Identifier] = vulnerability.CVSSv31.Score
-					counter.Categories[vulnerability.Category.Identifier] = severityColors[vulnerability.CVSSv31.Severity]
-				}
-			case cvss.Cvss4:
-				if vulnerability.CVSSv4.Score > highestSeverityByCategoryType[vulnerability.Category.Identifier] {
-					highestSeverityByCategoryType[vulnerability.Category.Identifier] = vulnerability.CVSSv4.Score
-					counter.Categories[vulnerability.Category.Identifier] = severityColors[vulnerability.CVSSv4.Severity]
-				}
+			vector := vectorFor(vulnerability, maxVersion)
+			if vector.Score > highestSeverityByCategoryType[vulnerability.Category.Identifier] {
+				highestSeverityByCategoryType[vulnerability.Category.Identifier] = vector.Score
+				counter.Categories[vulnerability.Category.Identifier] = severityColors[vector.Severity]
 			}
 
 			owaspCounter[vulnerability.Category.Source] = counter

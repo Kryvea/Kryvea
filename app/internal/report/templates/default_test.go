@@ -248,12 +248,13 @@ func TestDefault(t *testing.T) {
 			})
 		}
 		poc.Pocs = append(poc.Pocs, model.PocItem{
-			Index:        4,
-			Type:         "image",
-			Description:  randName(10),
-			URI:          fmt.Sprintf("https://%s", vulnerability.Target.FQDN),
-			ImageData:    imageDataDecoded,
-			ImageCaption: "Caption" + randName(2),
+			Index:          4,
+			Type:           "image",
+			Description:    randName(10),
+			URI:            fmt.Sprintf("https://%s", vulnerability.Target.FQDN),
+			ImageReference: fmt.Sprintf("poc-image-%d.png", i),
+			ImageData:      imageDataDecoded,
+			ImageCaption:   "Caption" + randName(2),
 		})
 
 		poc.Pocs = append(poc.Pocs, model.PocItem{
@@ -282,7 +283,7 @@ func TestDefault(t *testing.T) {
 		FormatJson: true,
 	}
 
-	report, _ := NewZipDefaultTemplate()
+	report := NewZipDefaultTemplate()
 
 	t.Run("test", func(t *testing.T) {
 		data, err := report.Render(reportData, options)
@@ -290,7 +291,7 @@ func TestDefault(t *testing.T) {
 			t.Errorf("Render() = %v, want %v, cvss versions %v", err, true, assessment.CVSSVersions)
 		}
 
-		err = os.WriteFile("report.zip", data, 0644)
+		err = os.WriteFile(filepath.Join(t.TempDir(), "report.zip"), data, 0644)
 		if err != nil {
 			t.Errorf("os.WriteFile() = %v, want %v", err, nil)
 		}

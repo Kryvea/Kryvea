@@ -10,14 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	STYLE_WRAPPER_F = `<w:rPr>%s</w:rPr><w:t>%s</w:t>`
-	SHADING_W_TAG_F = `<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`
-)
-
-var (
-	SHADING_WRAPPER_F = fmt.Sprintf(STYLE_WRAPPER_F, SHADING_W_TAG_F, "%s")
-)
+const SHADING_WRAPPER_F = `<w:rPr><w:shd w:val="clear" w:color="auto" w:fill="%s"/></w:rPr><w:t>%s</w:t>`
 
 // MakeVulnIndexFunc returns a template function that gives each vulnerability
 // its 1-based sequential index across the full sorted vulnerability list.

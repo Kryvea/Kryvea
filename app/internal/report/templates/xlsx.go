@@ -32,7 +32,3 @@ func (t *XlsxTemplate) Render(reportData *reportdata.ReportData, options *report
 func (t *XlsxTemplate) Filename() string {
 	return fmt.Sprintf("%s.%s", t.filename, t.extension)
 }
-
-func (t *XlsxTemplate) Extension() string {
-	return t.extension
-}

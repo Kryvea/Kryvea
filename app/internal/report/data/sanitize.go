@@ -16,15 +16,12 @@ func SanitizeCustomer(customer *model.Customer) {
 }
 
 func SanitizeAssessment(assessment *model.Assessment) {
-	sanitizeTargets := make([]model.Target, len(assessment.Targets))
-	for i, target := range assessment.Targets {
-		sanitizeTarget(&target)
-		sanitizeTargets[i] = target
+	for i := range assessment.Targets {
+		sanitizeTarget(&assessment.Targets[i])
 	}
 
 	assessment.Name = escapeXMLString(assessment.Name)
 	assessment.Language = escapeXMLString(assessment.Language)
-	assessment.Targets = sanitizeTargets
 	assessment.Status = escapeXMLString(assessment.Status)
 	assessment.Type.Short = escapeXMLString(assessment.Type.Short)
 	assessment.Type.Full = escapeXMLString(assessment.Type.Full)
@@ -50,25 +47,33 @@ func SanitizeAndSortVulnerabilities(vulnerabilities []model.Vulnerability, maxVe
 		sanitizeVulnerability(&vulnerabilities[i])
 	}
 
-	// Sort by maxVersion score
-	switch maxVersion {
-	case cvss.Cvss2:
-		sort.Slice(vulnerabilities, func(j, k int) bool {
-			return vulnerabilities[j].CVSSv2.Score > vulnerabilities[k].CVSSv2.Score
-		})
-	case cvss.Cvss3:
-		sort.Slice(vulnerabilities, func(j, k int) bool {
-			return vulnerabilities[j].CVSSv3.Score > vulnerabilities[k].CVSSv3.Score
-		})
-	case cvss.Cvss31:
-		sort.Slice(vulnerabilities, func(j, k int) bool {
-			return vulnerabilities[j].CVSSv31.Score > vulnerabilities[k].CVSSv31.Score
-		})
-	case cvss.Cvss4:
-		sort.Slice(vulnerabilities, func(j, k int) bool {
-			return vulnerabilities[j].CVSSv4.Score > vulnerabilities[k].CVSSv4.Score
-		})
+	sortVulnerabilitiesByScore(vulnerabilities, maxVersion)
+}
+
+// SortVulnerabilities is the escaping-free counterpart of
+// SanitizeAndSortVulnerabilities: same ordering, no text mutation.
+func SortVulnerabilities(vulnerabilities []model.Vulnerability, maxVersion string) {
+	for i := range vulnerabilities {
+		sortPocsByIndex(vulnerabilities[i].Poc.Pocs)
 	}
+
+	sortVulnerabilitiesByScore(vulnerabilities, maxVersion)
+}
+
+func sortVulnerabilitiesByScore(vulnerabilities []model.Vulnerability, maxVersion string) {
+	if !cvss.IsValidVersion(maxVersion) {
+		return
+	}
+
+	sort.Slice(vulnerabilities, func(j, k int) bool {
+		return vectorFor(&vulnerabilities[j], maxVersion).Score > vectorFor(&vulnerabilities[k], maxVersion).Score
+	})
+}
+
+func sortPocsByIndex(pocs []model.PocItem) {
+	sort.Slice(pocs, func(i, j int) bool {
+		return pocs[i].Index < pocs[j].Index
+	})
 }
 
 func sanitizeVulnerability(item *model.Vulnerability) {
@@ -113,9 +118,7 @@ func SanitizeAndSortPoc(poc *model.Poc) {
 		sanitizePocItem(&poc.Pocs[i])
 	}
 
-	sort.Slice(poc.Pocs, func(i, j int) bool {
-		return poc.Pocs[i].Index < poc.Pocs[j].Index
-	})
+	sortPocsByIndex(poc.Pocs)
 }
 
 func sanitizePocItem(item *model.PocItem) {
