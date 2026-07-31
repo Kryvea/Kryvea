@@ -87,7 +87,22 @@ func (d *Driver) formDataReadFile(c *fiber.Ctx, fieldName string) (data []byte, 
 	return data, file.Filename, nil
 }
 
+// formDataReadImage reads a single uploaded image, resolving the configured
+// size limit itself. Callers reading several images in a loop should fetch the
+// limit once and use formDataReadImageMax instead.
 func (d *Driver) formDataReadImage(c *fiber.Ctx, ctx context.Context, fieldName string) (data []byte, filename string, err error) {
+	maxImageSize, err := d.maxImageSize(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return d.formDataReadImageMax(c, fieldName, maxImageSize)
+}
+
+// formDataReadImageMax is formDataReadImage with the size limit already
+// resolved, so a caller reading many images issues one settings query in total
+// rather than one per image.
+func (d *Driver) formDataReadImageMax(c *fiber.Ctx, fieldName string, maxImageSize int64) (data []byte, filename string, err error) {
 	file, err := c.FormFile(fieldName)
 	if err != nil {
 		return nil, "", err
@@ -97,9 +112,8 @@ func (d *Driver) formDataReadImage(c *fiber.Ctx, ctx context.Context, fieldName 
 		return nil, "", errors.New("Invalid file")
 	}
 
-	err = d.db.Setting().ValidateImageSize(ctx, file.Size)
-	if err != nil {
-		return nil, "", err
+	if file.Size > maxImageSize {
+		return nil, "", store.ErrFileSizeTooLarge
 	}
 
 	data, err = d.readFile(file)
@@ -114,6 +128,19 @@ func (d *Driver) formDataReadImage(c *fiber.Ctx, ctx context.Context, fieldName 
 	return data, file.Filename, nil
 }
 
+// maxImageSize returns the configured upload limit for a single image.
+func (d *Driver) maxImageSize(ctx context.Context) (int64, error) {
+	setting, err := d.db.Setting().Get(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return setting.MaxImageSize, nil
+}
+
+// readFile copies the whole uploaded part into memory. The buffer is sized
+// upfront from file.Size: io.ReadAll would instead grow from 512 bytes,
+// allocating roughly five times the payload in transient garbage.
 func (d *Driver) readFile(file *multipart.FileHeader) ([]byte, error) {
 	f, err := file.Open()
 	if err != nil {
@@ -121,8 +148,8 @@ func (d *Driver) readFile(file *multipart.FileHeader) ([]byte, error) {
 	}
 	defer f.Close()
 
-	data, err := io.ReadAll(f)
-	if err != nil {
+	data := make([]byte, file.Size)
+	if _, err := io.ReadFull(f, data); err != nil {
 		return nil, err
 	}
 

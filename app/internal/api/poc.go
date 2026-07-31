@@ -5,11 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
-	"sync"
 
 	"github.com/Kryvea/Kryvea/internal/model"
-	"github.com/Kryvea/Kryvea/internal/safe"
 	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
@@ -32,6 +31,12 @@ type pocData struct {
 	TextData           string                  `json:"text_data"`
 	TextHighlights     []model.HighlightedText `json:"text_highlights"`
 	StartingLineNumber int                     `json:"starting_line_number"`
+}
+
+// hasImage reports whether the PoC carries an image that must be read from the
+// multipart form.
+func hasImage(data pocData) bool {
+	return data.Type == model.PocTypeImage && data.ImageReference != ""
 }
 
 func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
@@ -60,64 +65,54 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 		}
 	}
 
-	pocs := make([]model.PocItem, len(pocsData))
-	safePocs := safe.New(pocs)
-
-	errorChan := make(chan string, len(pocsData))
-
-	wg := sync.WaitGroup{}
-	// read image data in parallel; images are persisted later in the transaction
-	for i, data := range pocsData {
-		wg.Add(1)
-		go func(i int, data pocData) {
-			defer wg.Done()
-			pocImageFilename := ""
-			imageData := []byte{}
-			if data.Type == model.PocTypeImage && data.ImageReference != "" {
-				imageData, pocImageFilename, err = d.formDataReadImage(c, c.UserContext(), data.ImageReference)
-				if err != nil {
-					c.Status(fiber.StatusBadRequest)
-
-					switch err {
-					case store.ErrFileSizeTooLarge:
-						errorChan <- fmt.Sprintf("PoC %d: Image file size is too large", i)
-						return
-					case store.ErrImageTypeNotAllowed:
-						errorChan <- fmt.Sprintf("PoC %d: Image type is not allowed", i)
-						return
-					}
-
-					errorChan <- fmt.Sprintf("PoC %d: Cannot read image data", i)
-					return
-				}
-			}
-			safePocs.Set(i, model.PocItem{
-				Index:              data.Index,
-				Type:               data.Type,
-				Description:        data.Description,
-				URI:                data.URI,
-				Request:            data.Request,
-				RequestHighlights:  data.RequestHighlights,
-				Response:           data.Response,
-				ResponseHighlights: data.ResponseHighlights,
-				ImageData:          imageData,
-				ImageFilename:      pocImageFilename,
-				ImageCaption:       data.ImageCaption,
-				TextLanguage:       data.TextLanguage,
-				TextData:           data.TextData,
-				TextHighlights:     data.TextHighlights,
-				StartingLineNumber: data.StartingLineNumber,
-			})
-		}(i, data)
+	// the size limit is the same for every image, so read it once instead of
+	// once per PoC; text-only upserts skip the query entirely
+	var maxImageSize int64
+	if slices.ContainsFunc(pocsData, hasImage) {
+		maxImageSize, err = d.maxImageSize(c.UserContext())
+		if err != nil {
+			return jsonError(c, fiber.StatusInternalServerError, "Cannot read settings")
+		}
 	}
 
-	wg.Wait()
-	close(errorChan)
-
-	// Collect all errors
+	// the multipart form is already in memory; images are persisted later in the transaction
+	pocs := make([]model.PocItem, len(pocsData))
 	var errs []string
-	for err := range errorChan {
-		errs = append(errs, err)
+	for i, data := range pocsData {
+		var imageData []byte
+		var imageFilename string
+		if hasImage(data) {
+			var err error
+			imageData, imageFilename, err = d.formDataReadImageMax(c, data.ImageReference, maxImageSize)
+			if err != nil {
+				switch {
+				case errors.Is(err, store.ErrFileSizeTooLarge):
+					errs = append(errs, fmt.Sprintf("PoC %d: Image file size is too large", i))
+				case errors.Is(err, store.ErrImageTypeNotAllowed):
+					errs = append(errs, fmt.Sprintf("PoC %d: Image type is not allowed", i))
+				default:
+					errs = append(errs, fmt.Sprintf("PoC %d: Cannot read image data", i))
+				}
+				continue
+			}
+		}
+		pocs[i] = model.PocItem{
+			Index:              data.Index,
+			Type:               data.Type,
+			Description:        data.Description,
+			URI:                data.URI,
+			Request:            data.Request,
+			RequestHighlights:  data.RequestHighlights,
+			Response:           data.Response,
+			ResponseHighlights: data.ResponseHighlights,
+			ImageData:          imageData,
+			ImageFilename:      imageFilename,
+			ImageCaption:       data.ImageCaption,
+			TextLanguage:       data.TextLanguage,
+			TextData:           data.TextData,
+			TextHighlights:     data.TextHighlights,
+			StartingLineNumber: data.StartingLineNumber,
+		}
 	}
 
 	if len(errs) > 0 {
@@ -129,7 +124,6 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 	}
 
 	_, err = d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
-		pocs := safePocs.GetAll()
 		for i := range pocs {
 			// only image pocs carry image data; skip the file insert for the rest
 			if len(pocs[i].ImageData) == 0 {
