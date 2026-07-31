@@ -13,22 +13,28 @@ const (
 	logFileName = "kryvea.log"
 )
 
+// logPath is resolved by NewLevelWriter and read back by GetLogPath, whose
+// callers do not have the log configuration at hand.
+var logPath string
+
 // NewLevelWriter returns a writer that duplicates every log line to
-// stdout and to a size-rotated log file in logDir.
-func NewLevelWriter(logDir string, maxSizeMB, maxBackups, maxAgeDays int, compress bool) zerolog.LevelWriter {
+// stdout and to a size-rotated log file in cfg.Directory.
+func NewLevelWriter(cfg config.Log) zerolog.LevelWriter {
+	logPath = filepath.Join(cfg.Directory, logFileName)
+
 	logWriter := &lumberjack.Logger{
-		Filename:   filepath.Join(logDir, logFileName),
-		MaxSize:    maxSizeMB,
-		MaxBackups: maxBackups,
-		MaxAge:     maxAgeDays,
-		Compress:   compress,
+		Filename:   logPath,
+		MaxSize:    cfg.MaxSizeMB,
+		MaxBackups: cfg.MaxBackups,
+		MaxAge:     cfg.MaxAgeDays,
+		Compress:   cfg.Compress,
 	}
 
 	return zerolog.MultiLevelWriter(os.Stdout, logWriter)
 }
 
-// GetLogPath returns the path of the current log file. It reads the log
-// directory from config because its callers do not have it at hand.
+// GetLogPath returns the path of the current log file, resolved when
+// NewLevelWriter was called.
 func GetLogPath() string {
-	return filepath.Join(config.GetLogDirectory(), logFileName)
+	return logPath
 }

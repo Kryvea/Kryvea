@@ -25,24 +25,24 @@ type Driver struct {
 	logger   zerolog.Logger
 }
 
-func NewDriver(ctx context.Context, dsn, filesDir, adminUser, adminPass string, levelWriter zerolog.LevelWriter) (*Driver, error) {
+func NewDriver(ctx context.Context, cfg config.DB, admin config.Admin, levelWriter zerolog.LevelWriter) (*Driver, error) {
 	logger := zerolog.New(levelWriter).With().
 		Str("source", "db-driver").
 		Timestamp().Logger()
 
-	sqlDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
+	sqlDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(cfg.DSN)))
 
-	if v := config.GetPgMaxConns(); v > 0 {
-		sqlDB.SetMaxOpenConns(v)
+	if cfg.MaxOpenConns > 0 {
+		sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	}
-	if v := config.GetPgMinConns(); v > 0 {
-		sqlDB.SetMaxIdleConns(v)
+	if cfg.MaxIdleConns > 0 {
+		sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	}
-	if v := config.GetPgMaxConnLifetime(); v > 0 {
-		sqlDB.SetConnMaxLifetime(v)
+	if cfg.ConnMaxLifetime > 0 {
+		sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	}
-	if v := config.GetPgMaxConnIdleTime(); v > 0 {
-		sqlDB.SetConnMaxIdleTime(v)
+	if cfg.ConnMaxIdleTime > 0 {
+		sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -61,7 +61,7 @@ func NewDriver(ctx context.Context, dsn, filesDir, adminUser, adminPass string, 
 	)
 	logger.Debug().Msg("connected to PostgreSQL")
 
-	d := &Driver{db: bunDB, sqlDB: sqlDB, filesDir: filesDir, logger: logger}
+	d := &Driver{db: bunDB, sqlDB: sqlDB, filesDir: cfg.FilesDir, logger: logger}
 
 	if err := d.applySchema(ctx); err != nil {
 		_ = d.Close()
@@ -73,7 +73,7 @@ func NewDriver(ctx context.Context, dsn, filesDir, adminUser, adminPass string, 
 		return nil, fmt.Errorf("ensure files dir: %w", err)
 	}
 
-	if err := d.bootstrapAdmin(ctx, adminUser, adminPass); err != nil {
+	if err := d.bootstrapAdmin(ctx, admin.User, admin.Pass); err != nil {
 		_ = d.Close()
 		return nil, fmt.Errorf("bootstrap admin: %w", err)
 	}

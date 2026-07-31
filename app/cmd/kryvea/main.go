@@ -20,34 +20,23 @@ func main() {
 }
 
 func run() error {
-	if err := i18n.InitI18n(config.GetLocalesPath()); err != nil {
+	cfg := config.Load()
+
+	if err := i18n.InitI18n(cfg.LocalesPath); err != nil {
 		return fmt.Errorf("init i18n: %w", err)
 	}
 
-	levelWriter := log.NewLevelWriter(
-		config.GetLogDirectory(),
-		config.GetLogMaxSizeMB(),
-		config.GetLogMaxBackups(),
-		config.GetLogMaxAgeDays(),
-		config.GetLogCompress(),
-	)
+	levelWriter := log.NewLevelWriter(cfg.Log)
 
-	driver, err := db.NewDriver(
-		context.Background(),
-		config.GetPgDSN(),
-		config.GetFilesDir(),
-		config.GetAdminUser(),
-		config.GetAdminPass(),
-		levelWriter,
-	)
+	driver, err := db.NewDriver(context.Background(), cfg.DB, cfg.Admin, levelWriter)
 	if err != nil {
 		return fmt.Errorf("init bun driver: %w", err)
 	}
 
 	engine.NewEngine(
-		config.GetListeningAddr(),
-		config.GetRootPath(),
-		config.GetBodyLimitMB(),
+		cfg.Addr,
+		cfg.RootPath,
+		cfg.BodyLimitMB,
 		driver,
 		levelWriter,
 	).Serve()
