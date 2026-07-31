@@ -14,7 +14,7 @@ func (d *Driver) SessionMiddleware(c *fiber.Ctx) error {
 		return c.Next()
 	}
 
-	session := c.Cookies("kryvea")
+	session := c.Cookies(util.KryveaSessionCookie)
 	token, err := crypto.ParseToken(session)
 	if err != nil {
 		util.ClearCookies(c)
