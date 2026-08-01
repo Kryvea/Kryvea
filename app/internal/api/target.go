@@ -51,6 +51,10 @@ func (d *Driver) BulkTargets(c *fiber.Ctx) error {
 		if errStr != "" {
 			return jsonError(c, fiber.StatusBadRequest, errStr)
 		}
+
+		if assessment.Customer.ID != customer.ID {
+			return jsonError(c, fiber.StatusForbidden, "Forbidden")
+		}
 	}
 
 	for i := range data.Upsert {
