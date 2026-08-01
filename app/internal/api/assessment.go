@@ -357,6 +357,15 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 		return jsonError(c, fiber.StatusBadRequest, "Invalid Assessment ID")
 	}
 
+	data := &exportRequestData{}
+	if err := c.BodyParser(data); err != nil {
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
+	}
+
+	if data.Type == "" {
+		return jsonError(c, fiber.StatusBadRequest, "Type is required")
+	}
+
 	assessment, err := d.db.Assessment().GetByIDWithRelations(c.UserContext(), assessmentID)
 	if err != nil {
 		return jsonError(c, fiber.StatusBadRequest, "Invalid Assessment ID")
@@ -369,6 +378,19 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
+	var template *model.Template
+	if _, ok := report.ReportTemplateMap[data.Type]; ok {
+		var errStr string
+		template, errStr = d.templateFromParam(c.UserContext(), data.Template)
+		if errStr != "" {
+			return jsonError(c, fiber.StatusBadRequest, errStr)
+		}
+
+		if !model.IsNullCustomer(template.Customer) && !user.CanAccessCustomer(template.Customer.ID) {
+			return jsonError(c, fiber.StatusForbidden, "Forbidden")
+		}
+	}
+
 	if customer.LogoID != uuid.Nil {
 		logoData, _, err := d.db.FileReference().ReadByID(c.UserContext(), customer.LogoID)
 		if err != nil {
@@ -377,27 +399,12 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 		customer.LogoData = logoData
 	}
 
-	data := &exportRequestData{}
-	if err := c.BodyParser(data); err != nil {
-		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
-	}
-
-	if data.Type == "" {
-		return jsonError(c, fiber.StatusBadRequest, "Type is required")
-	}
-
 	if !cvss.IsValidVersion(data.SortByCvss) {
 		data.SortByCvss = util.GetMaxCvssVersion(assessment.CVSSVersions)
 	}
 
 	var templateBytes []byte
-
-	if _, ok := report.ReportTemplateMap[data.Type]; ok {
-		template, errStr := d.templateFromParam(c.UserContext(), data.Template)
-		if errStr != "" {
-			return jsonError(c, fiber.StatusBadRequest, errStr)
-		}
-
+	if template != nil {
 		templateBytes, _, err = d.db.FileReference().ReadByID(c.UserContext(), template.FileID)
 		if err != nil {
 			return jsonError(c, fiber.StatusBadRequest, "Invalid template ID")
