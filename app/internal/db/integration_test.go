@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Kryvea/Kryvea/internal/config"
 	"github.com/Kryvea/Kryvea/internal/log"
 	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/store"
@@ -21,9 +22,19 @@ func newTestDriver(t *testing.T) *Driver {
 	}
 
 	tmp := t.TempDir()
-	lw := log.NewLevelWriter(tmp, 1, 1, 1, false)
+	lw := log.NewLevelWriter(config.Log{
+		Directory:  tmp,
+		MaxSizeMB:  1,
+		MaxBackups: 1,
+		MaxAgeDays: 1,
+	})
 
-	d, err := NewDriver(context.Background(), dsn, tmp, "", "", lw)
+	d, err := NewDriver(
+		context.Background(),
+		config.DB{DSN: dsn, FilesDir: tmp},
+		config.Admin{},
+		lw,
+	)
 	if err != nil {
 		t.Fatalf("NewDriver: %v", err)
 	}
