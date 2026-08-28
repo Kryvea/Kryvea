@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -14,13 +13,10 @@ import (
 	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/rs/zerolog"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/pgdialect"
-	"github.com/uptrace/bun/driver/pgdriver"
 )
 
 type Driver struct {
 	db       *bun.DB
-	sqlDB    *sql.DB
 	filesDir string
 	logger   zerolog.Logger
 }
@@ -30,52 +26,39 @@ func NewDriver(ctx context.Context, cfg config.DB, admin config.Admin, levelWrit
 		Str("source", "db-driver").
 		Timestamp().Logger()
 
-	sqlDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(cfg.DSN)))
-
-	if cfg.MaxOpenConns > 0 {
-		sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-	}
-	if cfg.MaxIdleConns > 0 {
-		sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-	}
-	if cfg.ConnMaxLifetime > 0 {
-		sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	}
-	if cfg.ConnMaxIdleTime > 0 {
-		sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
-	}
-
-	pingCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	if err := sqlDB.PingContext(pingCtx); err != nil {
-		_ = sqlDB.Close()
-		logger.Error().Err(err).Msg("failed to ping postgres")
+	bunDB, err := ConnectDB(ctx, cfg, levelWriter)
+	if err != nil {
 		return nil, err
 	}
 
-	bunDB := bun.NewDB(sqlDB, pgdialect.New())
-	bunDB.RegisterModel(
-		(*dbAssessmentTarget)(nil),
-		(*dbUserCustomer)(nil),
-		(*dbUserAssessment)(nil),
-	)
-	logger.Debug().Msg("connected to PostgreSQL")
+	d := &Driver{db: bunDB, filesDir: cfg.FilesDir, logger: logger}
 
-	d := &Driver{db: bunDB, sqlDB: sqlDB, filesDir: cfg.FilesDir, logger: logger}
-
-	if err := d.applySchema(ctx); err != nil {
+	if err = d.initializeApplication(ctx, admin); err != nil {
 		_ = d.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
+		return nil, err
+	}
+
+	return d, nil
+}
+
+func (d *Driver) Close() error {
+	if d.db == nil {
+		return nil
+	}
+	return d.db.Close()
+}
+
+func (d *Driver) initializeApplication(ctx context.Context, admin config.Admin) error {
+	if err := d.applySchema(ctx); err != nil {
+		return fmt.Errorf("apply schema: %w", err)
 	}
 
 	if err := d.ensureFilesDir(); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("ensure files dir: %w", err)
+		return fmt.Errorf("ensure files dir: %w", err)
 	}
 
 	if err := d.bootstrapAdmin(ctx, admin.User, admin.Pass); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("bootstrap admin: %w", err)
+		return fmt.Errorf("bootstrap admin: %w", err)
 	}
 
 	if removed, err := d.FileReference().GCFiles(ctx); err != nil {
@@ -84,16 +67,6 @@ func NewDriver(ctx context.Context, cfg config.DB, admin config.Admin, levelWrit
 		d.logger.Info().Int("removed", removed).Msg("startup file gc removed orphans")
 	}
 
-	return d, nil
-}
-
-func (d *Driver) Close() error {
-	if d.db != nil {
-		_ = d.db.Close()
-	}
-	if d.sqlDB != nil {
-		return d.sqlDB.Close()
-	}
 	return nil
 }
 
