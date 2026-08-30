@@ -133,7 +133,7 @@ func (ci *CategoryIndex) Search(ctx context.Context, query string) ([]model.Cate
 	if query == "" {
 		return ci.GetAll(ctx)
 	}
-	like := "%" + query + "%"
+	like := "%" + escapeLike(query) + "%"
 	var rows []dbCategory
 	if err := idbFrom(ctx, ci.driver.db).NewSelect().
 		Model(&rows).

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/model"
@@ -37,4 +38,12 @@ func emptyStringsIfNil(s []string) []string {
 		return []string{}
 	}
 	return s
+}
+
+func escapeLike(s string) string {
+	return strings.NewReplacer(
+		"\\", "\\\\",
+		"%", "\\%",
+		"_", "\\_",
+	).Replace(s)
 }

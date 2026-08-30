@@ -132,7 +132,7 @@ func (ai *AssessmentIndex) Search(ctx context.Context, customers []uuid.UUID, cu
 	var rows []dbAssessment
 	q := ai.selectWithRelations(ctx, &rows)
 	if name != "" {
-		q = q.Where("a.name ILIKE ?", "%"+name+"%")
+		q = q.Where("a.name ILIKE ?", "%"+escapeLike(name)+"%")
 	}
 	switch {
 	case customerID != uuid.Nil:

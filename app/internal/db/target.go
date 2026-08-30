@@ -136,7 +136,7 @@ func (ti *TargetIndex) Search(ctx context.Context, customerID uuid.UUID, query s
 		q = q.Where("t.customer_id = ?", customerID)
 	}
 	if query != "" {
-		lk := "%" + query + "%"
+		lk := "%" + escapeLike(query) + "%"
 		q = q.Where(`(t.ipv4 ILIKE ? OR t.ipv6 ILIKE ? OR t.fqdn ILIKE ? OR t.tag ILIKE ? OR t.protocol ILIKE ? OR t.port::text ILIKE ?)`,
 			lk, lk, lk, lk, lk, lk)
 	}
