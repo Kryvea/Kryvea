@@ -129,8 +129,15 @@ func TestIntegration_CloneAssessmentWithPoc(t *testing.T) {
 	ctx := context.Background()
 	customerID, assessmentID, vulnID, target1ID, _ := seedAssessment(t, d)
 
+	requestingUserID, err := d.User().Insert(ctx, &model.User{
+		Username: uniqueName("clone-user"),
+	}, "test-password")
+	if err != nil {
+		t.Fatalf("User.Insert: %v", err)
+	}
+
 	cloneName := uniqueName("clone")
-	cloneID, err := d.Assessment().Clone(ctx, assessmentID, cloneName, true)
+	cloneID, err := d.Assessment().Clone(ctx, assessmentID, cloneName, true, requestingUserID)
 	if err != nil {
 		t.Fatalf("Assessment.Clone: %v", err)
 	}
@@ -164,6 +171,9 @@ func TestIntegration_CloneAssessmentWithPoc(t *testing.T) {
 	}
 	if cloneVulns[0].Target.ID != target1ID {
 		t.Errorf("cloned vuln target_id: got %s, want %s", cloneVulns[0].Target.ID, target1ID)
+	}
+	if cloneVulns[0].User.ID != requestingUserID {
+		t.Errorf("cloned vuln user_id: got %s, want %s", cloneVulns[0].User.ID, requestingUserID)
 	}
 
 	clonePoc, err := d.Poc().GetByVulnerabilityID(ctx, cloneVulns[0].ID)

@@ -318,7 +318,7 @@ func (d *Driver) CloneAssessment(c *fiber.Ctx) error {
 	}
 
 	cloneAssessmentID, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
-		return d.db.Assessment().Clone(ctx, assessment.ID, data.Name, data.IncludePocs)
+		return d.db.Assessment().Clone(ctx, assessment.ID, data.Name, data.IncludePocs, user.ID)
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrDuplicateKey) {

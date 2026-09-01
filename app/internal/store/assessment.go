@@ -22,7 +22,7 @@ type AssessmentStore interface {
 	UpdateTargets(ctx context.Context, assessmentID uuid.UUID, target uuid.UUID) error
 
 	Delete(ctx context.Context, assessmentID uuid.UUID) error
-	Clone(ctx context.Context, assessmentID uuid.UUID, assessmentName string, includePocs bool) (uuid.UUID, error)
+	Clone(ctx context.Context, assessmentID uuid.UUID, assessmentName string, includePocs bool, userID uuid.UUID) (uuid.UUID, error)
 
 	BulkUpdateTargets(ctx context.Context, assessmentID uuid.UUID, targetIDs []uuid.UUID) error
 }
