@@ -257,8 +257,8 @@ func (ai *AssessmentIndex) Clone(ctx context.Context, sourceAssessmentID uuid.UU
 		_, err = idb.NewRaw(cloneVulnerabilitiesWithPocsSQL, sourceAssessmentID, newAssessmentID, userID).Exec(ctx)
 	} else {
 		_, err = idb.NewRaw(`
-			INSERT INTO vulnerability (id, assessment_id, `+vulnCloneColumns+`)
-			SELECT gen_random_uuid(), ?, `+vulnCloneValues+`
+			INSERT INTO vulnerability (id, assessment_id, user_id, `+vulnCloneColumns+`)
+			SELECT gen_random_uuid(), ?, ?, `+vulnCloneColumns+`
 			FROM vulnerability WHERE assessment_id = ?
 		`, newAssessmentID, userID, sourceAssessmentID).Exec(ctx)
 	}
@@ -267,24 +267,6 @@ func (ai *AssessmentIndex) Clone(ctx context.Context, sourceAssessmentID uuid.UU
 	}
 	return newAssessmentID, nil
 }
-
-// vulnCloneColumns is the list of vulnerability columns copied verbatim when a
-// vulnerability is cloned (everything except id, assessment_id and the
-// created_at/updated_at defaults).
-const vulnCloneColumns = `customer_id, target_id, user_id, category_id,
-	detailed_title, status, cvssv2_vector, cvssv2_score, cvssv3_vector, cvssv3_score,
-	cvssv31_vector, cvssv31_score, cvssv4_vector, cvssv4_score, refs, description,
-	remediation, generic_description_enabled, generic_remediation_enabled,
-	generic_remediation_text`
-
-// vulnCloneValues is the list of vulnerability columns copied verbatim when a
-// vulnerability is cloned (everything except id, assessment_id and the
-// created_at/updated_at defaults), with user_id as parameter
-const vulnCloneValues = `customer_id, target_id, ?, category_id,
-	detailed_title, status, cvssv2_vector, cvssv2_score, cvssv3_vector, cvssv3_score,
-	cvssv31_vector, cvssv31_score, cvssv4_vector, cvssv4_score, refs, description,
-	remediation, generic_description_enabled, generic_remediation_enabled,
-	generic_remediation_text`
 
 // cloneVulnerabilitiesWithPocsSQL clones every vulnerability of an assessment
 // together with its poc and poc_image rows in a single set-based statement.
@@ -295,8 +277,8 @@ const cloneVulnerabilitiesWithPocsSQL = `
 		WHERE assessment_id = ?
 	),
 	ins_vuln AS (
-		INSERT INTO vulnerability (id, assessment_id, ` + vulnCloneColumns + `)
-		SELECT m.new_id, ?, ` + vulnCloneValues + `
+		INSERT INTO vulnerability (id, assessment_id, user_id, ` + vulnCloneColumns + `)
+		SELECT m.new_id, ?, ?, ` + vulnCloneColumns + `
 		FROM vulnerability
 		JOIN vuln_map m ON m.old_id = vulnerability.id
 	),
