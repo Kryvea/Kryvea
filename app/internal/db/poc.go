@@ -165,11 +165,6 @@ func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerability
 		return err
 	}
 
-	newID, err := uuid.NewRandom()
-	if err != nil {
-		return err
-	}
-
 	clonedItems := make([]model.PocItem, len(src.Pocs))
 	for i, item := range src.Pocs {
 		newItemID, err := uuid.NewRandom()
@@ -181,9 +176,15 @@ func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerability
 	}
 
 	idb := idbFrom(ctx, pi.driver.db)
+
+	newPocID, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
+
 	if _, err := idb.NewInsert().
 		Model(&dbPoc{
-			ID:              newID,
+			ID:              newPocID,
 			VulnerabilityID: dstVulnerabilityID,
 			Items:           clonedItems,
 		}).
@@ -197,7 +198,7 @@ func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerability
 			continue
 		}
 		rows = append(rows, dbPocImage{
-			PocID:           newID,
+			PocID:           newPocID,
 			PocItemID:       item.ID,
 			FileReferenceID: item.ImageID,
 		})
