@@ -53,14 +53,14 @@ type Log struct {
 // malformed falls back to that default, so Load never fails.
 func Load() Config {
 	return Config{
-		Addr:        getEnvConfig("KRYVEA_ADDR", "127.0.0.1:8000"),
-		RootPath:    getEnvConfig("KRYVEA_ROOT_PATH", "/"),
+		Addr:        getEnvStr("KRYVEA_ADDR", "127.0.0.1:8000"),
+		RootPath:    getEnvStr("KRYVEA_ROOT_PATH", "/"),
 		BodyLimitMB: getEnvInt("KRYVEA_BODY_LIMIT_MB", 1_000),
-		LocalesPath: getEnvConfig("KRYVEA_LOCALES_PATH", "/etc/kryvea/locales"),
+		LocalesPath: getEnvStr("KRYVEA_LOCALES_PATH", "/etc/kryvea/locales"),
 
 		DB: DB{
-			DSN:             getEnvConfig("KRYVEA_PG_DSN", "postgres://kryvea:kryvea@localhost:5432/kryvea?sslmode=disable"),
-			FilesDir:        getEnvConfig("KRYVEA_FILES_DIR", "/var/lib/kryvea/files"),
+			DSN:             getEnvStr("KRYVEA_PG_DSN", "postgres://kryvea:kryvea@localhost:5432/kryvea?sslmode=disable"),
+			FilesDir:        getEnvStr("KRYVEA_FILES_DIR", "/var/lib/kryvea/files"),
 			MaxOpenConns:    getEnvInt("KRYVEA_PG_MAX_CONNS", 0),
 			MaxIdleConns:    getEnvInt("KRYVEA_PG_MIN_CONNS", 0),
 			ConnMaxLifetime: getEnvDuration("KRYVEA_PG_MAX_CONN_LIFETIME", 0),
@@ -68,12 +68,12 @@ func Load() Config {
 		},
 
 		Admin: Admin{
-			User: getEnvConfig("KRYVEA_ADMIN_USER", "kryvea"),
-			Pass: getEnvConfig("KRYVEA_ADMIN_PASS", "kryveapassword"),
+			User: getEnvStr("KRYVEA_ADMIN_USER", "kryvea"),
+			Pass: getEnvStr("KRYVEA_ADMIN_PASS", "kryveapassword"),
 		},
 
 		Log: Log{
-			Directory:  getEnvConfig("KRYVEA_LOG_DIRECTORY", "/var/log/kryvea/"),
+			Directory:  getEnvStr("KRYVEA_LOG_DIRECTORY", "/var/log/kryvea/"),
 			MaxSizeMB:  getEnvInt("KRYVEA_LOG_MAX_SIZE_MB", 10),
 			MaxBackups: getEnvInt("KRYVEA_LOG_MAX_BACKUPS", 5),
 			MaxAgeDays: getEnvInt("KRYVEA_LOG_MAX_AGE_DAYS", 0),
@@ -82,7 +82,7 @@ func Load() Config {
 	}
 }
 
-func getEnvConfig(envName, defaultValue string) string {
+func getEnvStr(envName, defaultValue string) string {
 	value := os.Getenv(envName)
 	if value != "" {
 		return value
