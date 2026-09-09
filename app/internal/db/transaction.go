@@ -18,6 +18,7 @@ func (d *Driver) RunInTxWithLock(ctx context.Context, lockName string, fn func(c
 	err := d.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		if lockName != "" {
 			key := advisoryLockKey(lockName)
+
 			var ok bool
 			if err := tx.QueryRowContext(ctx,
 				"SELECT pg_try_advisory_xact_lock(?)", key,
@@ -28,15 +29,19 @@ func (d *Driver) RunInTxWithLock(ctx context.Context, lockName string, fn func(c
 				return fmt.Errorf("%w: lock %q is already held", store.ErrLocked, lockName)
 			}
 		}
+
 		res, err := fn(withIDB(ctx, tx))
 		if err != nil {
 			return err
 		}
+
 		result = res
+
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }

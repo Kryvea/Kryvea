@@ -21,6 +21,7 @@ func (ti *TargetIndex) Insert(ctx context.Context, target *model.Target, custome
 	if err != nil {
 		return uuid.Nil, err
 	}
+
 	row := &dbTarget{
 		ID:       id,
 		IPv4:     target.IPv4,
@@ -34,11 +35,14 @@ func (ti *TargetIndex) Insert(ctx context.Context, target *model.Target, custome
 		c := customerID
 		row.CustomerID = &c
 	}
+
 	if _, err := idbFrom(ctx, ti.driver.db).NewInsert().Model(row).Exec(ctx); err != nil {
 		return uuid.Nil, mapErr(err)
 	}
+
 	target.ID = id
 	target.Customer.ID = customerID
+
 	return id, nil
 }
 
@@ -58,12 +62,15 @@ func (ti *TargetIndex) FirstOrInsert(ctx context.Context, target *model.Target, 
 	} else {
 		q = q.Where("customer_id = ?", customerID)
 	}
+
 	if err := q.Scan(ctx); err == nil {
 		return existing.ID, false, nil
 	} else if err = mapErr(err); !errors.Is(err, store.ErrNotFound) {
 		return uuid.Nil, false, err
 	}
+
 	id, err := ti.Insert(ctx, target, customerID)
+
 	return id, true, err
 }
 
@@ -71,6 +78,7 @@ func (ti *TargetIndex) Update(ctx context.Context, id uuid.UUID, target *model.T
 	if id == model.ImmutableID {
 		return store.ErrImmutableTarget
 	}
+
 	_, err := idbFrom(ctx, ti.driver.db).NewUpdate().
 		Model((*dbTarget)(nil)).
 		Set("ipv4 = ?", target.IPv4).
@@ -81,6 +89,7 @@ func (ti *TargetIndex) Update(ctx context.Context, id uuid.UUID, target *model.T
 		Set("tag = ?", target.Tag).
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -88,10 +97,12 @@ func (ti *TargetIndex) Delete(ctx context.Context, id uuid.UUID) error {
 	if id == model.ImmutableID {
 		return store.ErrImmutableTarget
 	}
+
 	_, err := idbFrom(ctx, ti.driver.db).NewDelete().
 		Model((*dbTarget)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -102,7 +113,9 @@ func (ti *TargetIndex) GetByIDWithRelations(ctx context.Context, id uuid.UUID) (
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -110,9 +123,11 @@ func (ti *TargetIndex) ExistingIDsForCustomer(ctx context.Context, ids []uuid.UU
 	if len(ids) == 0 {
 		return nil, nil
 	}
+
 	var rows []struct {
 		ID uuid.UUID `bun:"id"`
 	}
+
 	err := idbFrom(ctx, ti.driver.db).NewSelect().
 		Model((*dbTarget)(nil)).
 		Column("id").
@@ -122,10 +137,12 @@ func (ti *TargetIndex) ExistingIDsForCustomer(ctx context.Context, ids []uuid.UU
 	if err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]uuid.UUID, len(rows))
 	for i, r := range rows {
 		out[i] = r.ID
 	}
+
 	return out, nil
 }
 
@@ -135,18 +152,23 @@ func (ti *TargetIndex) Search(ctx context.Context, customerID uuid.UUID, query s
 	if customerID != uuid.Nil {
 		q = q.Where("t.customer_id = ?", customerID)
 	}
+
 	if query != "" {
 		lk := "%" + escapeLike(query) + "%"
 		q = q.Where(`(t.ipv4 ILIKE ? OR t.ipv6 ILIKE ? OR t.fqdn ILIKE ? OR t.tag ILIKE ? OR t.protocol ILIKE ? OR t.port::text ILIKE ?)`,
 			lk, lk, lk, lk, lk, lk)
 	}
+
 	q = q.OrderExpr("t.fqdn, t.ipv4")
 	if err := q.Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Target, len(rows))
+
 	for i := range rows {
 		out[i] = rows[i].toModel()
 	}
+
 	return out, nil
 }

@@ -19,6 +19,7 @@ func (ui *UserIndex) Insert(ctx context.Context, user *model.User, password stri
 	if err != nil {
 		return uuid.Nil, err
 	}
+
 	hash, err := crypto.HashPassword(password)
 	if err != nil {
 		return uuid.Nil, err
@@ -44,7 +45,9 @@ func (ui *UserIndex) Insert(ctx context.Context, user *model.User, password stri
 	if err := ui.insertUserCustomers(ctx, id, user.Customers); err != nil {
 		return uuid.Nil, err
 	}
+
 	user.ID = id
+
 	return id, nil
 }
 
@@ -59,10 +62,12 @@ func (ui *UserIndex) insertUserCustomers(ctx context.Context, userID uuid.UUID, 
 	if len(rows) == 0 {
 		return nil
 	}
+
 	_, err := idbFrom(ctx, ui.driver.db).NewInsert().
 		Model(&rows).
 		On("CONFLICT DO NOTHING").
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -78,9 +83,11 @@ func (ui *UserIndex) Login(ctx context.Context, username, password string) (*mod
 		}
 		return nil, err
 	}
+
 	if !crypto.ComparePassword(password, row.Password) {
 		return nil, store.ErrInvalidCredentials
 	}
+
 	if row.DisabledAt != nil && row.DisabledAt.Before(time.Now()) {
 		return nil, store.ErrDisabledUser
 	}
@@ -100,16 +107,19 @@ func (ui *UserIndex) Login(ctx context.Context, username, password string) (*mod
 		Exec(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	return &u, nil
 }
 
 func (ui *UserIndex) RefreshUserToken(ctx context.Context, user *model.User) error {
 	user.TokenExpiry = user.TokenExpiry.Add(model.TokenExtendTime)
+
 	_, err := idbFrom(ctx, ui.driver.db).NewUpdate().
 		Model((*dbUser)(nil)).
 		Set("token_expiry = ?", user.TokenExpiry).
 		Where("id = ?", user.ID).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -120,6 +130,7 @@ func (ui *UserIndex) Logout(ctx context.Context, id uuid.UUID) error {
 		Set("token_expiry = NULL").
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -128,8 +139,10 @@ func (ui *UserIndex) Get(ctx context.Context, id uuid.UUID) (*model.User, error)
 	if err != nil {
 		return nil, err
 	}
+
 	u.Password = nil
 	u.Token = nil
+
 	return u, nil
 }
 
@@ -140,6 +153,7 @@ func (ui *UserIndex) GetAll(ctx context.Context) ([]model.User, error) {
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	users := make([]model.User, len(rows))
 	for i := range rows {
 		u := rowToUserWithRelations(&rows[i])
@@ -147,6 +161,7 @@ func (ui *UserIndex) GetAll(ctx context.Context) ([]model.User, error) {
 		u.Token = nil
 		users[i] = u
 	}
+
 	return users, nil
 }
 
@@ -159,6 +174,7 @@ func (ui *UserIndex) GetAllUsernames(ctx context.Context) ([]string, error) {
 		Scan(ctx, &names); err != nil {
 		return nil, mapErr(err)
 	}
+
 	return names, nil
 }
 
@@ -167,7 +183,9 @@ func (ui *UserIndex) GetByToken(ctx context.Context, token crypto.Token) (*model
 	if err != nil {
 		return nil, err
 	}
+
 	u.Password = nil
+
 	return u, nil
 }
 
@@ -176,26 +194,32 @@ func (ui *UserIndex) GetByUsername(ctx context.Context, username string) (*model
 	if err != nil {
 		return nil, err
 	}
+
 	u.Password = nil
+
 	return u, nil
 }
 
 func (ui *UserIndex) Update(ctx context.Context, id uuid.UUID, user *model.User) error {
 	idb := idbFrom(ctx, ui.driver.db)
 	q := idb.NewUpdate().Model((*dbUser)(nil)).Where("id = ?", id)
+
 	dirty := false
 	if !user.DisabledAt.IsZero() {
 		q = q.Set("disabled_at = ?", user.DisabledAt)
 		dirty = true
 	}
+
 	if user.Username != "" {
 		q = q.Set("username = ?", user.Username)
 		dirty = true
 	}
+
 	if user.Role != "" {
 		q = q.Set("role = ?", user.Role)
 		dirty = true
 	}
+
 	if dirty {
 		if _, err := q.Exec(ctx); err != nil {
 			return mapErr(err)
@@ -209,6 +233,7 @@ func (ui *UserIndex) Update(ctx context.Context, id uuid.UUID, user *model.User)
 			Exec(ctx); err != nil {
 			return mapErr(err)
 		}
+
 		if err := ui.insertUserCustomers(ctx, id, user.Customers); err != nil {
 			return err
 		}
@@ -226,9 +251,11 @@ func (ui *UserIndex) ensureAdminExists(ctx context.Context) error {
 	if err != nil {
 		return mapErr(err)
 	}
+
 	if count == 0 {
 		return store.ErrAdminUserRequired
 	}
+
 	return nil
 }
 
@@ -287,6 +314,7 @@ func (ui *UserIndex) Delete(ctx context.Context, id uuid.UUID) error {
 		Exec(ctx); err != nil {
 		return mapErr(err)
 	}
+
 	return ui.ensureAdminExists(ctx)
 }
 
@@ -295,12 +323,14 @@ func (ui *UserIndex) ResetUserPassword(ctx context.Context, id uuid.UUID, newPas
 	if err != nil {
 		return err
 	}
+
 	_, err = idbFrom(ctx, ui.driver.db).NewUpdate().
 		Model((*dbUser)(nil)).
 		Set("password = ?", hash).
 		Set("password_expiry = now()").
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -309,6 +339,7 @@ func (ui *UserIndex) ResetPassword(ctx context.Context, user *model.User, passwo
 	if err != nil {
 		return err
 	}
+
 	user.PasswordExpiry = model.TimeNever
 	user.Token = crypto.NewToken()
 	user.TokenExpiry = time.Now().Add(model.TokenExpireTime)
@@ -321,6 +352,7 @@ func (ui *UserIndex) ResetPassword(ctx context.Context, user *model.User, passwo
 		Set("token_expiry = ?", user.TokenExpiry).
 		Where("id = ?", user.ID).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -335,11 +367,14 @@ func (ui *UserIndex) ValidatePassword(ctx context.Context, id uuid.UUID, current
 		if err = mapErr(err); errors.Is(err, store.ErrNotFound) {
 			return store.ErrInvalidCredentials
 		}
+
 		return err
 	}
+
 	if !crypto.ComparePassword(currentPassword, row.Password) {
 		return store.ErrInvalidCredentials
 	}
+
 	return nil
 }
 
@@ -361,19 +396,24 @@ func (ui *UserIndex) fetchOneWithRelations(ctx context.Context, where string, ar
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	u := rowToUserWithRelations(&row)
+
 	return &u, nil
 }
 
 func rowToUserWithRelations(r *dbUser) model.User {
 	u := r.toModel()
+
 	u.Customers = make([]model.Customer, len(r.Customers))
 	for i := range r.Customers {
 		u.Customers[i] = r.Customers[i].toModel()
 	}
+
 	u.Assessments = make([]model.Assessment, len(r.Assessments))
 	for i := range r.Assessments {
 		u.Assessments[i] = r.Assessments[i].toModel()
 	}
+
 	return u
 }

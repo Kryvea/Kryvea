@@ -19,10 +19,12 @@ func (ti *TemplateIndex) Insert(ctx context.Context, template *model.Template) (
 	if template.FileID == uuid.Nil {
 		return uuid.Nil, store.ErrTemplateFileIDRequired
 	}
+
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return uuid.Nil, err
 	}
+
 	row := &dbTemplate{
 		ID:           id,
 		Name:         template.Name,
@@ -33,14 +35,18 @@ func (ti *TemplateIndex) Insert(ctx context.Context, template *model.Template) (
 		Identifier:   template.Identifier,
 		FileID:       template.FileID,
 	}
+
 	if template.Customer != nil && template.Customer.ID != uuid.Nil {
 		c := template.Customer.ID
 		row.CustomerID = &c
 	}
+
 	if _, err := idbFrom(ctx, ti.driver.db).NewInsert().Model(row).Exec(ctx); err != nil {
 		return uuid.Nil, mapErr(err)
 	}
+
 	template.ID = id
+
 	return id, nil
 }
 
@@ -51,7 +57,9 @@ func (ti *TemplateIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.Temp
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -62,7 +70,9 @@ func (ti *TemplateIndex) GetByFileID(ctx context.Context, fileID uuid.UUID) (*mo
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -73,10 +83,12 @@ func (ti *TemplateIndex) GetAll(ctx context.Context) ([]model.Template, error) {
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Template, len(rows))
 	for i := range rows {
 		out[i] = rows[i].toModel()
 	}
+
 	return out, nil
 }
 
@@ -85,5 +97,6 @@ func (ti *TemplateIndex) Delete(ctx context.Context, id uuid.UUID) error {
 		Model((*dbTemplate)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }

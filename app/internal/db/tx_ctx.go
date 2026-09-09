@@ -18,5 +18,6 @@ func idbFrom(ctx context.Context, fallback bun.IDB) bun.IDB {
 			return db
 		}
 	}
+
 	return fallback
 }

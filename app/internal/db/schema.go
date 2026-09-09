@@ -12,6 +12,7 @@ func (d *Driver) applySchema(ctx context.Context) error {
 	if _, err := d.db.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto`); err != nil {
 		return fmt.Errorf("create pgcrypto extension: %w", err)
 	}
+
 	if _, err := d.db.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pg_trgm`); err != nil {
 		return fmt.Errorf("create pg_trgm extension: %w", err)
 	}
