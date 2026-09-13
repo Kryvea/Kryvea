@@ -28,6 +28,7 @@ func (ci *CustomerIndex) Insert(ctx context.Context, customer *model.Customer) (
 		LogoMimeType:  customer.LogoMimeType,
 		LogoReference: customer.LogoReference,
 	}
+
 	if customer.LogoID != uuid.Nil {
 		l := customer.LogoID
 		row.LogoID = &l
@@ -38,6 +39,7 @@ func (ci *CustomerIndex) Insert(ctx context.Context, customer *model.Customer) (
 	}
 
 	customer.ID = id
+
 	return id, nil
 }
 
@@ -48,6 +50,7 @@ func (ci *CustomerIndex) Update(ctx context.Context, id uuid.UUID, customer *mod
 		Set("language = ?", customer.Language).
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -62,7 +65,9 @@ func (ci *CustomerIndex) UpdateLogo(ctx context.Context, id, logoID uuid.UUID, m
 	} else {
 		q = q.Set("logo_id = ?", logoID)
 	}
+
 	_, err := q.Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -71,6 +76,7 @@ func (ci *CustomerIndex) Delete(ctx context.Context, id uuid.UUID) error {
 		Model((*dbCustomer)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -82,7 +88,9 @@ func (ci *CustomerIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.Cust
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -96,10 +104,12 @@ func (ci *CustomerIndex) selectWithTemplates(ctx context.Context, row any) *bun.
 
 func rowToCustomerWithTemplates(r *dbCustomer) model.Customer {
 	out := r.toModel()
+
 	out.Templates = make([]model.Template, len(r.Templates))
 	for i := range r.Templates {
 		out.Templates[i] = r.Templates[i].toModelBare()
 	}
+
 	return out
 }
 
@@ -110,7 +120,9 @@ func (ci *CustomerIndex) GetByIDWithRelations(ctx context.Context, id uuid.UUID)
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := rowToCustomerWithTemplates(&row)
+
 	return &out, nil
 }
 
@@ -118,6 +130,7 @@ func (ci *CustomerIndex) ExistingIDs(ctx context.Context, ids []uuid.UUID) ([]uu
 	if len(ids) == 0 {
 		return nil, nil
 	}
+
 	var existing []uuid.UUID
 	if err := idbFrom(ctx, ci.driver.db).NewSelect().
 		Model((*dbCustomer)(nil)).
@@ -126,21 +139,27 @@ func (ci *CustomerIndex) ExistingIDs(ctx context.Context, ids []uuid.UUID) ([]uu
 		Scan(ctx, &existing); err != nil {
 		return nil, mapErr(err)
 	}
+
 	return existing, nil
 }
 
 func (ci *CustomerIndex) GetAll(ctx context.Context, ids []uuid.UUID) ([]model.Customer, error) {
 	var rows []dbCustomer
+
 	q := ci.selectWithTemplates(ctx, &rows).Order("c.name")
+
 	if ids != nil {
 		q = q.Where("c.id IN (?)", bun.List(ids))
 	}
+
 	if err := q.Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Customer, len(rows))
 	for i := range rows {
 		out[i] = rowToCustomerWithTemplates(&rows[i])
 	}
+
 	return out, nil
 }

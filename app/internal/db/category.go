@@ -94,10 +94,12 @@ func (ci *CategoryIndex) Delete(ctx context.Context, id uuid.UUID) error {
 	if id == model.ImmutableID {
 		return store.ErrImmutableCategory
 	}
+
 	_, err := idbFrom(ctx, ci.driver.db).NewDelete().
 		Model((*dbCategory)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -110,10 +112,12 @@ func (ci *CategoryIndex) GetAll(ctx context.Context) ([]model.Category, error) {
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Category, len(rows))
 	for i, r := range rows {
 		out[i] = r.toModel()
 	}
+
 	return out, nil
 }
 
@@ -125,7 +129,9 @@ func (ci *CategoryIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.Cate
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -133,7 +139,9 @@ func (ci *CategoryIndex) Search(ctx context.Context, query string) ([]model.Cate
 	if query == "" {
 		return ci.GetAll(ctx)
 	}
+
 	like := "%" + escapeLike(query) + "%"
+
 	var rows []dbCategory
 	if err := idbFrom(ctx, ci.driver.db).NewSelect().
 		Model(&rows).
@@ -143,9 +151,11 @@ func (ci *CategoryIndex) Search(ctx context.Context, query string) ([]model.Cate
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Category, len(rows))
 	for i, r := range rows {
 		out[i] = r.toModel()
 	}
+
 	return out, nil
 }

@@ -35,6 +35,7 @@ func NewDriver(ctx context.Context, cfg config.DB, admin config.Admin, levelWrit
 
 	if err = d.initializeApplication(ctx, admin); err != nil {
 		_ = d.Close()
+
 		return nil, err
 	}
 
@@ -96,7 +97,9 @@ func (d *Driver) bootstrapAdmin(ctx context.Context, adminUser, adminPass string
 	}, adminPass); err != nil {
 		return fmt.Errorf("create admin user: %w", err)
 	}
+
 	d.logger.Info().Str("username", adminUser).Msg("created admin user")
+
 	return nil
 }
 

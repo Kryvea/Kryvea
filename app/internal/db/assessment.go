@@ -20,10 +20,12 @@ func (ai *AssessmentIndex) selectWithRelations(ctx context.Context, row any) *bu
 
 func rowToAssessmentWithRelations(r *dbAssessment) model.Assessment {
 	a := r.toModel()
+
 	a.Targets = make([]model.Target, len(r.Targets))
 	for i := range r.Targets {
 		a.Targets[i] = r.Targets[i].toModel()
 	}
+
 	return a
 }
 
@@ -32,6 +34,7 @@ func (ai *AssessmentIndex) Insert(ctx context.Context, assessment *model.Assessm
 	if err != nil {
 		return uuid.Nil, err
 	}
+
 	row := &dbAssessment{
 		ID:              id,
 		CustomerID:      customerID,
@@ -51,11 +54,14 @@ func (ai *AssessmentIndex) Insert(ctx context.Context, assessment *model.Assessm
 	if _, err := idbFrom(ctx, ai.driver.db).NewInsert().Model(row).Exec(ctx); err != nil {
 		return uuid.Nil, mapErr(err)
 	}
+
 	if err := ai.insertAssessmentTargets(ctx, id, assessment.Targets); err != nil {
 		return uuid.Nil, err
 	}
+
 	assessment.ID = id
 	assessment.Customer.ID = customerID
+
 	return id, nil
 }
 
@@ -65,15 +71,18 @@ func (ai *AssessmentIndex) insertAssessmentTargets(ctx context.Context, assessme
 		if t.ID == uuid.Nil {
 			continue
 		}
+
 		rows = append(rows, dbAssessmentTarget{AssessmentID: assessmentID, TargetID: t.ID})
 	}
 	if len(rows) == 0 {
 		return nil
 	}
+
 	_, err := idbFrom(ctx, ai.driver.db).NewInsert().
 		Model(&rows).
 		On("CONFLICT DO NOTHING").
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -84,7 +93,9 @@ func (ai *AssessmentIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.As
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -95,7 +106,9 @@ func (ai *AssessmentIndex) GetByIDWithRelations(ctx context.Context, id uuid.UUI
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := rowToAssessmentWithRelations(&row)
+
 	return &out, nil
 }
 
@@ -106,10 +119,12 @@ func (ai *AssessmentIndex) GetMultipleByID(ctx context.Context, ids []uuid.UUID)
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Assessment, len(rows))
 	for i := range rows {
 		out[i] = rowToAssessmentWithRelations(&rows[i])
 	}
+
 	return out, nil
 }
 
@@ -121,10 +136,12 @@ func (ai *AssessmentIndex) GetByCustomerID(ctx context.Context, customerID uuid.
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Assessment, len(rows))
 	for i := range rows {
 		out[i] = rowToAssessmentWithRelations(&rows[i])
 	}
+
 	return out, nil
 }
 
@@ -134,6 +151,7 @@ func (ai *AssessmentIndex) Search(ctx context.Context, customers []uuid.UUID, cu
 	if name != "" {
 		q = q.Where("a.name ILIKE ?", "%"+escapeLike(name)+"%")
 	}
+
 	switch {
 	case customerID != uuid.Nil:
 		q = q.Where("a.customer_id = ?", customerID)
@@ -145,10 +163,12 @@ func (ai *AssessmentIndex) Search(ctx context.Context, customers []uuid.UUID, cu
 	if err := q.Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Assessment, len(rows))
 	for i := range rows {
 		out[i] = rowToAssessmentWithRelations(&rows[i])
 	}
+
 	return out, nil
 }
 
@@ -184,6 +204,7 @@ func (ai *AssessmentIndex) Update(ctx context.Context, id uuid.UUID, assessment 
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -201,6 +222,7 @@ func (ai *AssessmentIndex) UpdateTargets(ctx context.Context, id uuid.UUID, targ
 		Model(&dbAssessmentTarget{AssessmentID: id, TargetID: targetID}).
 		On("CONFLICT DO NOTHING").
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -208,14 +230,17 @@ func (ai *AssessmentIndex) BulkUpdateTargets(ctx context.Context, id uuid.UUID, 
 	if len(targetIDs) == 0 {
 		return nil
 	}
+
 	rows := make([]dbAssessmentTarget, len(targetIDs))
 	for i, tid := range targetIDs {
 		rows[i] = dbAssessmentTarget{AssessmentID: id, TargetID: tid}
 	}
+
 	_, err := idbFrom(ctx, ai.driver.db).NewInsert().
 		Model(&rows).
 		On("CONFLICT DO NOTHING").
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -224,6 +249,7 @@ func (ai *AssessmentIndex) Delete(ctx context.Context, id uuid.UUID) error {
 		Model((*dbAssessment)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -232,8 +258,8 @@ func (ai *AssessmentIndex) Clone(ctx context.Context, sourceAssessmentID uuid.UU
 	if err != nil {
 		return uuid.Nil, err
 	}
-	idb := idbFrom(ctx, ai.driver.db)
 
+	idb := idbFrom(ctx, ai.driver.db)
 	if _, err := idb.NewRaw(`
 		INSERT INTO assessment (id, customer_id, name, language, start_date_time, end_date_time,
 			kickoff_date_time, status, type_short, type_full, cvss_versions, environment,
@@ -265,6 +291,7 @@ func (ai *AssessmentIndex) Clone(ctx context.Context, sourceAssessmentID uuid.UU
 	if err != nil {
 		return uuid.Nil, mapErr(err)
 	}
+
 	return newAssessmentID, nil
 }
 

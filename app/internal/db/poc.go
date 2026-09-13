@@ -21,8 +21,10 @@ func (pi *PocIndex) Upsert(ctx context.Context, poc *model.Poc) error {
 			if err != nil {
 				return err
 			}
+
 			poc.Pocs[i].ID = id
 		}
+
 		if poc.Pocs[i].ImageID != uuid.Nil {
 			poc.Pocs[i].ImageReference = util.CreateImageReference(poc.Pocs[i].ImageMimeType, poc.Pocs[i].ImageID)
 		}
@@ -34,6 +36,7 @@ func (pi *PocIndex) Upsert(ctx context.Context, poc *model.Poc) error {
 	if err != nil {
 		return err
 	}
+
 	// vulnerability_id is unique: a single upsert either inserts a fresh row or
 	// replaces the items of the existing one. RETURNING yields the winning id.
 	row := &dbPoc{
@@ -49,6 +52,7 @@ func (pi *PocIndex) Upsert(ctx context.Context, poc *model.Poc) error {
 		Exec(ctx); err != nil {
 		return mapErr(err)
 	}
+
 	pocID := row.ID
 	poc.ID = pocID
 	poc.UpdatedAt = time.Now()
@@ -75,15 +79,18 @@ func (pi *PocIndex) Upsert(ctx context.Context, poc *model.Poc) error {
 			return mapErr(err)
 		}
 	}
+
 	deleteQ := idb.NewDelete().
 		Model((*dbPocImage)(nil)).
 		Where("poc_id = ?", pocID)
 	if len(keptItemIDs) > 0 {
 		deleteQ = deleteQ.Where("poc_item_id NOT IN (?)", bun.List(keptItemIDs))
 	}
+
 	if _, err := deleteQ.Exec(ctx); err != nil {
 		return mapErr(err)
 	}
+
 	return nil
 }
 
@@ -91,12 +98,14 @@ func (pi *PocIndex) BulkInsertNew(ctx context.Context, pocs []model.Poc) error {
 	if len(pocs) == 0 {
 		return nil
 	}
+
 	rows := make([]dbPoc, len(pocs))
 	for i, poc := range pocs {
 		pocID, err := uuid.NewRandom()
 		if err != nil {
 			return err
 		}
+
 		items := make([]model.PocItem, len(poc.Pocs))
 		for j, item := range poc.Pocs {
 			if item.ID == uuid.Nil {
@@ -104,17 +113,22 @@ func (pi *PocIndex) BulkInsertNew(ctx context.Context, pocs []model.Poc) error {
 				if err != nil {
 					return err
 				}
+
 				item.ID = itemID
 			}
+
 			items[j] = item
 		}
+
 		rows[i] = dbPoc{
 			ID:              pocID,
 			VulnerabilityID: poc.VulnerabilityID,
 			Items:           items,
 		}
 	}
+
 	_, err := idbFrom(ctx, pi.driver.db).NewInsert().Model(&rows).Exec(ctx)
+
 	return mapErr(err)
 }
 
@@ -126,7 +140,9 @@ func (pi *PocIndex) getOne(ctx context.Context, where string, arg uuid.UUID) (*m
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -146,10 +162,12 @@ func (pi *PocIndex) GetByImageID(ctx context.Context, imageID uuid.UUID) ([]mode
 		Scan(ctx); err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := make([]model.Poc, len(rows))
 	for i := range rows {
 		out[i] = rows[i].toModel()
 	}
+
 	return out, nil
 }
 
@@ -162,6 +180,7 @@ func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerability
 		if errors.Is(err, store.ErrNotFound) {
 			return nil
 		}
+
 		return err
 	}
 
@@ -171,6 +190,7 @@ func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerability
 		if err != nil {
 			return err
 		}
+
 		clonedItems[i] = item
 		clonedItems[i].ID = newItemID
 	}
@@ -197,6 +217,7 @@ func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerability
 		if item.ImageID == uuid.Nil {
 			continue
 		}
+
 		rows = append(rows, dbPocImage{
 			PocID:           newPocID,
 			PocItemID:       item.ID,
@@ -210,5 +231,6 @@ func (pi *PocIndex) CloneByVulnerabilityID(ctx context.Context, srcVulnerability
 			return mapErr(err)
 		}
 	}
+
 	return nil
 }

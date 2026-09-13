@@ -24,9 +24,11 @@ func (r *dbSetting) toModel() model.Setting {
 		MaxImageSize:            r.MaxImageSize,
 		DefaultCategoryLanguage: r.DefaultCategoryLanguage,
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	return out
 }
 
@@ -45,12 +47,15 @@ func (r *dbFileReference) toModel() model.FileReference {
 		MimeType: r.MimeType,
 		UsedBy:   []uuid.UUID{},
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	if len(r.Checksum) == 16 {
 		copy(out.Checksum[:], r.Checksum)
 	}
+
 	return out
 }
 
@@ -77,12 +82,15 @@ func (r *dbCustomer) toModel() model.Customer {
 		LogoReference: r.LogoReference,
 		Templates:     []model.Template{},
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	if r.LogoID != nil {
 		out.LogoID = *r.LogoID
 	}
+
 	return out
 }
 
@@ -111,18 +119,23 @@ func (r *dbUser) toModel() model.User {
 		PasswordExpiry: r.PasswordExpiry,
 		Role:           r.Role,
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	if r.DisabledAt != nil {
 		out.DisabledAt = *r.DisabledAt
 	}
+
 	if len(r.Token) > 0 {
 		out.Token = crypto.Token(r.Token)
 	}
+
 	if r.TokenExpiry != nil {
 		out.TokenExpiry = *r.TokenExpiry
 	}
+
 	return out
 }
 
@@ -173,21 +186,27 @@ func (r *dbCategory) toModel() model.Category {
 		References:         r.References,
 		Source:             r.Source,
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	if out.GenericDescription == nil {
 		out.GenericDescription = map[string]string{}
 	}
+
 	if out.GenericRemediation == nil {
 		out.GenericRemediation = map[string]string{}
 	}
+
 	if out.LanguagesOrder == nil {
 		out.LanguagesOrder = []string{}
 	}
+
 	if out.References == nil {
 		out.References = []string{}
 	}
+
 	return out
 }
 
@@ -217,15 +236,19 @@ func (r *dbTarget) toModel() model.Target {
 		Protocol: r.Protocol,
 		Port:     r.Port,
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	if r.CustomerID != nil {
 		out.Customer.ID = *r.CustomerID
 	}
+
 	if r.Customer != nil {
 		out.Customer = r.Customer.toModel()
 	}
+
 	return out
 }
 
@@ -266,22 +289,28 @@ func (r *dbAssessment) toModel() model.Assessment {
 		VulnerabilityCount: r.VulnerabilityCount,
 		CVSSVersions:       r.CVSSVersions,
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	if r.StartDateTime != nil {
 		out.StartDateTime = *r.StartDateTime
 	}
+
 	if r.EndDateTime != nil {
 		out.EndDateTime = *r.EndDateTime
 	}
+
 	if r.KickoffDateTime != nil {
 		out.KickoffDateTime = *r.KickoffDateTime
 	}
+
 	out.Customer.ID = r.CustomerID
 	if r.Customer != nil {
 		out.Customer = r.Customer.toModel()
 	}
+
 	return out
 }
 
@@ -323,14 +352,17 @@ func (r *dbTemplate) toModelBare() model.Template {
 		Identifier:   r.Identifier,
 		FileID:       r.FileID,
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	return out
 }
 
 func (r *dbTemplate) toModel() model.Template {
 	out := r.toModelBare()
+
 	switch {
 	case r.Customer != nil:
 		c := r.Customer.toModel()
@@ -341,6 +373,7 @@ func (r *dbTemplate) toModel() model.Template {
 	default:
 		out.Customer = &model.Customer{}
 	}
+
 	return out
 }
 
@@ -387,6 +420,7 @@ func (r *dbVulnerability) toModel() model.Vulnerability {
 		Remediation:   r.Remediation,
 		References:    r.References,
 	}
+
 	v.ID = r.ID
 	v.CreatedAt = r.CreatedAt
 	v.UpdatedAt = r.UpdatedAt
@@ -406,9 +440,11 @@ func (r *dbVulnerability) toModel() model.Vulnerability {
 	v.Customer.ID = r.CustomerID
 	v.Target.ID = r.TargetID
 	v.Category.ID = r.CategoryID
+
 	if r.UserID != nil {
 		v.User.ID = *r.UserID
 	}
+
 	if r.Assessment != nil {
 		v.Assessment.Name = r.Assessment.Name
 		v.Assessment.Language = r.Assessment.Language
@@ -418,6 +454,7 @@ func (r *dbVulnerability) toModel() model.Vulnerability {
 	if r.Customer != nil {
 		v.Customer.Name = r.Customer.Name
 	}
+
 	if r.Target != nil {
 		v.Target.IPv4 = r.Target.IPv4
 		v.Target.IPv6 = r.Target.IPv6
@@ -425,13 +462,16 @@ func (r *dbVulnerability) toModel() model.Vulnerability {
 		v.Target.Port = r.Target.Port
 		v.Target.Protocol = r.Target.Protocol
 		v.Target.Tag = r.Target.Tag
+
 		if r.Target.CustomerID != nil {
 			v.Target.Customer.ID = *r.Target.CustomerID
 		}
 	}
+
 	if r.User != nil {
 		v.User.Username = r.User.Username
 	}
+
 	if r.Category != nil {
 		v.Category.Identifier = r.Category.Identifier
 		v.Category.Name = r.Category.Name
@@ -439,15 +479,19 @@ func (r *dbVulnerability) toModel() model.Vulnerability {
 		v.Category.LanguagesOrder = r.Category.LanguagesOrder
 		v.Category.References = r.Category.References
 		v.Category.Source = r.Category.Source
+
 		if v.GenericDescription.Enabled {
 			v.GenericDescription.Text = r.Category.GenericDescription[v.Assessment.Language]
 		}
+
 		if v.GenericRemediation.Enabled && v.GenericRemediation.Text == "" {
 			v.GenericRemediation.Text = r.Category.GenericRemediation[v.Assessment.Language]
 		}
 	}
+
 	v.Category.GenericDescription = map[string]string{}
 	v.Category.GenericRemediation = map[string]string{}
+
 	return v
 }
 
@@ -466,12 +510,15 @@ func (r *dbPoc) toModel() model.Poc {
 		VulnerabilityID: r.VulnerabilityID,
 		Pocs:            r.Items,
 	}
+
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
+
 	if out.Pocs == nil {
 		out.Pocs = []model.PocItem{}
 	}
+
 	return out
 }
 

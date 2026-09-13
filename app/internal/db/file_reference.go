@@ -27,14 +27,17 @@ func (d *Driver) writeFile(id uuid.UUID, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("mkdir file shard: %w", err)
 	}
+
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
+
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("rename file: %w", err)
 	}
+
 	return nil
 }
 
@@ -47,6 +50,7 @@ func (d *Driver) deleteFile(id uuid.UUID) error {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
+
 	return err
 }
 
@@ -65,6 +69,7 @@ func (i *FileReferenceIndex) Insert(ctx context.Context, data []byte) (uuid.UUID
 	if err != nil {
 		return uuid.Nil, "", err
 	}
+
 	mime := mimetype.Detect(data).String()
 
 	if err := i.driver.writeFile(id, data); err != nil {
@@ -80,6 +85,7 @@ func (i *FileReferenceIndex) Insert(ctx context.Context, data []byte) (uuid.UUID
 		_ = i.driver.deleteFile(id)
 		return uuid.Nil, "", mapErr(err)
 	}
+
 	return id, mime, nil
 }
 
@@ -92,7 +98,9 @@ func (i *FileReferenceIndex) getRowByID(ctx context.Context, id uuid.UUID) (*mod
 	if err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -101,16 +109,20 @@ func (i *FileReferenceIndex) GetByID(ctx context.Context, id uuid.UUID) (*model.
 	if err != nil {
 		return nil, err
 	}
+
 	usedBy, err := i.usedByOf(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+
 	out.UsedBy = usedBy
+
 	return out, nil
 }
 
 func (i *FileReferenceIndex) usedByOf(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
 	idb := idbFrom(ctx, i.driver.db)
+
 	var rows []uuid.UUID
 	if err := idb.NewRaw(`
 		SELECT id::uuid          FROM customer  WHERE logo_id           = ?
@@ -121,9 +133,11 @@ func (i *FileReferenceIndex) usedByOf(ctx context.Context, id uuid.UUID) ([]uuid
 	`, id, id, id).Scan(ctx, &rows); err != nil {
 		return nil, mapErr(err)
 	}
+
 	if rows == nil {
 		rows = []uuid.UUID{}
 	}
+
 	return rows, nil
 }
 
@@ -136,7 +150,9 @@ func (i *FileReferenceIndex) GetByChecksum(ctx context.Context, checksum [16]byt
 	if err != nil {
 		return nil, mapErr(err)
 	}
+
 	out := row.toModel()
+
 	return &out, nil
 }
 
@@ -147,10 +163,12 @@ func (i *FileReferenceIndex) ReadByID(ctx context.Context, id uuid.UUID) ([]byte
 	if err != nil {
 		return nil, nil, err
 	}
+
 	data, err := i.driver.readFile(id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read file payload: %w", err)
 	}
+
 	return data, fr, nil
 }
 
@@ -161,11 +179,13 @@ func (i *FileReferenceIndex) GCFiles(ctx context.Context) (int, error) {
 	if root == "" {
 		return 0, nil
 	}
+
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return 0, nil
 		}
+
 		return 0, fmt.Errorf("read files_dir: %w", err)
 	}
 
@@ -176,6 +196,7 @@ func (i *FileReferenceIndex) GCFiles(ctx context.Context) (int, error) {
 		Scan(ctx, &ids); err != nil {
 		return 0, mapErr(err)
 	}
+
 	known := make(map[uuid.UUID]struct{}, len(ids))
 	for _, id := range ids {
 		known[id] = struct{}{}
@@ -186,29 +207,36 @@ func (i *FileReferenceIndex) GCFiles(ctx context.Context) (int, error) {
 		if !shard.IsDir() {
 			continue
 		}
+
 		shardPath := filepath.Join(root, shard.Name())
 		files, err := os.ReadDir(shardPath)
 		if err != nil {
 			return removed, fmt.Errorf("read shard %s: %w", shard.Name(), err)
 		}
+
 		for _, f := range files {
 			name := f.Name()
 			if !strings.HasSuffix(name, ".bin") {
 				continue
 			}
+
 			id, err := uuid.Parse(strings.TrimSuffix(name, ".bin"))
 			if err != nil {
 				continue
 			}
+
 			if _, ok := known[id]; ok {
 				continue
 			}
+
 			if err := i.driver.deleteFile(id); err != nil {
 				i.driver.logger.Warn().Err(err).Str("id", id.String()).Msg("gc: failed to remove orphan file")
 				continue
 			}
+
 			removed++
 		}
 	}
+
 	return removed, nil
 }

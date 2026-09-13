@@ -22,12 +22,15 @@ func ConnectDB(ctx context.Context, cfg config.DB, levelWriter zerolog.LevelWrit
 	if cfg.MaxOpenConns > 0 {
 		sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	}
+
 	if cfg.MaxIdleConns > 0 {
 		sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	}
+
 	if cfg.ConnMaxLifetime > 0 {
 		sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	}
+
 	if cfg.ConnMaxIdleTime > 0 {
 		sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 	}
