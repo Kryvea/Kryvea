@@ -12,7 +12,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/pandatix/go-cvss v0.6.2
 	github.com/rs/zerolog v1.34.0
-	github.com/uptrace/bun v1.2.18
+	github.com/uptrace/bun v1.2.19-0.20260717144348-1a289f81f448
 	github.com/uptrace/bun/dialect/pgdialect v1.2.18
 	github.com/uptrace/bun/driver/pgdriver v1.2.18
 	github.com/valyala/fasthttp v1.68.0

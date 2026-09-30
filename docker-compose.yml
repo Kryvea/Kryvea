@@ -19,8 +19,25 @@ services:
             timeout: 3s
             retries: 10
 
+    migrate:
+        build:
+            context: app
+            target: kryvea-migrate
+        image: kryvea-migrate:latest
+        command: ["up"]
+        restart: "no"
+        environment:
+            - KRYVEA_PG_DSN=postgres://kryvea:kryveapass@kryvea-pg:5432/kryvea?sslmode=disable
+        depends_on:
+            pg:
+                condition: service_healthy
+        networks:
+            - kryvea-data
+
     app:
-        build: app
+        build:
+            context: app
+            target: kryvea
         image: kryvea-app:latest
         container_name: kryvea-app
         restart: unless-stopped
@@ -40,8 +57,8 @@ services:
             - ./.data/log:/var/log/kryvea/
             - ./.data/files:/var/lib/kryvea/files
         depends_on:
-            pg:
-                condition: service_healthy
+            migrate:
+                condition: service_completed_successfully
         networks:
             - kryvea-net
             - kryvea-data

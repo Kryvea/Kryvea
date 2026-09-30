@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/config"
+	"github.com/Kryvea/Kryvea/internal/dbschema"
 	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/rs/zerolog"
@@ -50,8 +51,8 @@ func (d *Driver) Close() error {
 }
 
 func (d *Driver) initializeApplication(ctx context.Context, admin config.Admin) error {
-	if err := d.applySchema(ctx); err != nil {
-		return fmt.Errorf("apply schema: %w", err)
+	if err := dbschema.Check(ctx, d.db); err != nil {
+		return err
 	}
 
 	if err := d.ensureFilesDir(); err != nil {
