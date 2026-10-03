@@ -3,30 +3,27 @@ import {
   MouseEvent as ReactMouseEvent,
   ReactNode,
   isValidElement,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { SortState } from "../../types/utils.types";
 import Card from "./Card";
 import Flex from "./Flex";
 import Icon from "./Icon";
 import Paginator from "./Paginator";
 import Shimmer from "./Shimmer";
 
-type SortState = { key: string; order: "asc" | "desc" };
-
 type DataColumn<Row> = {
   kind?: "data";
   header: string;
   render: (row: Row) => ReactNode;
   sortKey?: string;
-  sortable?: boolean;
   sortValue?: (row: Row) => string | number | Date;
   maxWidth?: string;
-  /** Seed this column at its header width instead of its content width (still resizable afterwards). */
+  // Seed this column at its header width instead of its content width (still resizable afterwards).
   fitHeader?: boolean;
 };
 
@@ -49,6 +46,8 @@ interface PaginationProps {
   totalRows?: number;
   onPageChange: (page: number) => void;
   onPerPageChange: (perPage: number) => void;
+  // Called when the backend reports fewer pages than the current one (e.g. a stale deep link); defaults to onPageChange.
+  onPageOutOfRange?: (lastPage: number) => void;
 }
 
 type RowWithId = { id: string | number };
@@ -57,9 +56,8 @@ type BaseTableProps<Row extends RowWithId> = {
   columns: Column<Row>[];
   data: Row[];
   loading?: boolean;
-  rowKey?: (row: Row, index: number) => string | number;
   perPage?: number;
-  /** Stable id used to persist per-column widths in localStorage. Omit to keep widths only for the session. */
+  // Stable id used to persist per-column widths in localStorage. Omit to keep widths only for the session.
   tableId?: string;
 };
 
@@ -90,10 +88,8 @@ const ACTIONS_KEY = "__actions__";
 const columnKey = <Row,>(column: Column<Row>) => (column.kind === "actions" ? ACTIONS_KEY : column.header);
 
 function headerContentWidth(th: HTMLElement): number {
-  const label = th.querySelector<HTMLElement>(".th-label");
-  if (!label) {
-    return Math.round(th.getBoundingClientRect().width);
-  }
+  // Only ever called on data-column headers, which always render a .th-label.
+  const label = th.querySelector<HTMLElement>(".th-label")!;
   const style = getComputedStyle(th);
   return Math.ceil(label.scrollWidth + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight));
 }
@@ -150,14 +146,21 @@ function loadColumnWidths(tableId?: string): Record<string, number> {
   }
 }
 
-function saveColumnWidths(tableId: string | undefined, widths: Record<string, number>) {
+function saveColumnWidths(tableId: string | undefined, widths: Record<string, number>, validKeys: string[]) {
   if (!tableId) {
     return;
   }
+  // Persist only the current columns, so renamed/removed ones don't leave orphan entries.
+  const pruned: Record<string, number> = {};
+  for (const key of validKeys) {
+    if (widths[key] != null) {
+      pruned[key] = widths[key];
+    }
+  }
   try {
-    localStorage.setItem(WIDTHS_PREFIX + tableId, JSON.stringify(widths));
+    localStorage.setItem(WIDTHS_PREFIX + tableId, JSON.stringify(pruned));
   } catch {
-    /* ignore quota / serialization errors */
+    // ignore quota / serialization errors
   }
 }
 
@@ -168,15 +171,12 @@ function useControllableState<T>(
   initial: T
 ): [T, (value: T) => void] {
   const [internal, setInternal] = useState(initial);
-  const setValue = useCallback(
-    (next: T) => {
-      onControlledChange?.(next);
-      if (!isControlled) {
-        setInternal(next);
-      }
-    },
-    [isControlled, onControlledChange]
-  );
+  const setValue = (next: T) => {
+    onControlledChange?.(next);
+    if (!isControlled) {
+      setInternal(next);
+    }
+  };
   return [isControlled ? controlledValue : internal, setValue];
 }
 
@@ -192,15 +192,30 @@ function useTableData<Row>(params: {
 }) {
   const { columns, data, serverMode, query, sort, page, perPage, totalPages } = params;
 
+  // Callers rebuild the columns array inline on every render, so these memos key
+  // on the column signature instead of the array identity or they would never hit.
+  const colSignature = columns.map(columnKey).join("|");
+
+  // Render each row to searchable text once per dataset (not once per keystroke), and only while searching.
+  // Texts are kept per column so the query must match within a single column.
+  const searching = !serverMode && !!query;
+  const searchableText = useMemo(() => {
+    if (!searching) {
+      return [];
+    }
+    return data.map(row =>
+      columns.filter(column => column.kind !== "actions").map(column => extractText(column.render(row)).toLowerCase())
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searching, data, colSignature]);
+
   const filteredData = useMemo(() => {
-    if (serverMode || !query) {
+    if (!searching) {
       return data;
     }
     const q = query.toLowerCase();
-    return data.filter(row =>
-      columns.some(column => column.kind !== "actions" && extractText(column.render(row)).toLowerCase().includes(q))
-    );
-  }, [serverMode, query, data, columns]);
+    return data.filter((_, index) => searchableText[index].some(text => text.includes(q)));
+  }, [searching, query, data, searchableText]);
 
   const sortedData = useMemo(() => {
     if (serverMode || !sort) {
@@ -219,15 +234,8 @@ function useTableData<Row>(params: {
       .map(row => ({ row, sortValue: valueOf(row) }))
       .sort((a, b) => compareValues(a.sortValue, b.sortValue) * direction)
       .map(entry => entry.row);
-  }, [serverMode, filteredData, sort, columns]);
-
-  // Slicing is separate from sorting so paging through results doesn't re-sort the whole dataset.
-  const visibleData = useMemo(() => {
-    if (serverMode) {
-      return sortedData;
-    }
-    return sortedData.slice(perPage * (page - PAGE_FLOOR), perPage * page);
-  }, [serverMode, sortedData, page, perPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverMode, filteredData, sort, colSignature]);
 
   const numPages = useMemo(() => {
     if (serverMode) {
@@ -237,30 +245,30 @@ function useTableData<Row>(params: {
     return Number.isNaN(pages) ? 0 : pages;
   }, [serverMode, totalPages, filteredData.length, perPage]);
 
-  return { filteredData, visibleData, numPages };
+  // If the dataset shrinks below the current page, clamp instead of rendering an empty page.
+  const clampedPage = serverMode ? page : Math.min(page, Math.max(numPages, PAGE_FLOOR));
+
+  // Slicing is separate from sorting so paging through results doesn't re-sort the whole dataset.
+  const visibleData = useMemo(() => {
+    if (serverMode) {
+      return sortedData;
+    }
+    return sortedData.slice(perPage * (clampedPage - PAGE_FLOOR), perPage * clampedPage);
+  }, [serverMode, sortedData, clampedPage, perPage]);
+
+  return { filteredData, visibleData, numPages, page: clampedPage };
 }
 
 function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, ready?: boolean) {
-  const [baseWidths, setBaseWidths] = useState<Record<string, number>>(() => loadColumnWidths(tableId));
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [dragging, setDragging] = useState(false);
+  const [widths, setWidths] = useState<Record<string, number>>(() => loadColumnWidths(tableId));
   const containerRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const headerRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
-  const refSetters = useRef<Record<string, (el: HTMLTableCellElement | null) => void>>({});
-  const draggingRef = useRef(false);
+  const colRefs = useRef<Record<string, HTMLTableColElement | null>>({});
+  const headerRefSetters = useRef<Record<string, (el: HTMLTableCellElement | null) => void>>({});
+  const colRefSetters = useRef<Record<string, (el: HTMLTableColElement | null) => void>>({});
+  const draggedRef = useRef(false);
   const endDragRef = useRef<(() => void) | null>(null);
-
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) {
-      return;
-    }
-    const measure = () => setContainerWidth(el.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
 
   // Unmounting mid-drag would otherwise leave the document listeners and body styles in place.
   useEffect(() => () => endDragRef.current?.(), []);
@@ -271,93 +279,99 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
     if (!ready) {
       return;
     }
-    setBaseWidths(prev => {
-      const next = { ...prev };
-      let changed = false;
-      for (const column of columns) {
-        const key = columnKey(column);
-        const el = headerRefs.current[key];
-        if (next[key] == null && el) {
-          next[key] =
-            column.kind !== "actions" && column.fitHeader
-              ? headerContentWidth(el)
-              : Math.round(el.getBoundingClientRect().width);
-          changed = true;
-        }
+    const dataKeys = columns.filter(column => column.kind !== "actions").map(columnKey);
+    const isFreshTable = dataKeys.every(key => widths[key] == null);
+    const next = { ...widths };
+    let changed = false;
+    for (const column of columns) {
+      const key = columnKey(column);
+      const el = headerRefs.current[key];
+      if (next[key] == null && el) {
+        next[key] =
+          column.kind !== "actions" && column.fitHeader
+            ? headerContentWidth(el)
+            : Math.round(el.getBoundingClientRect().width);
+        changed = true;
       }
-      return changed ? next : prev;
-    });
+    }
+    if (!changed) {
+      return;
+    }
+    if (isFreshTable) {
+      // One-time stretch so a table with no stored widths fills its container.
+      const containerWidth = containerRef.current?.clientWidth ?? 0;
+      const sumAll = columns.reduce((sum, column) => sum + (next[columnKey(column)] ?? 0), 0);
+      const sumData = dataKeys.reduce((sum, key) => sum + (next[key] ?? 0), 0);
+      if (containerWidth > sumAll && sumData > 0 && dataKeys.length > 0) {
+        const targetData = containerWidth - (sumAll - sumData);
+        let used = 0;
+        dataKeys.forEach((key, index) => {
+          next[key] =
+            index === dataKeys.length - 1 ? targetData - used : Math.round(targetData * (next[key] / sumData));
+          used += next[key];
+        });
+      }
+    }
+    setWidths(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colSignature, ready]);
 
-  const allWidthsKnown = columns.every(column => baseWidths[columnKey(column)] != null);
+  const allWidthsKnown = columns.every(column => widths[columnKey(column)] != null);
+  const totalWidth = allWidthsKnown ? columns.reduce((sum, column) => sum + widths[columnKey(column)], 0) : undefined;
 
-  // Leftover space is spread across data columns proportionally to their width (AG Grid "size columns to fit").
-  // Integer widths only, so 1px borders never land on a fractional edge; the last data column absorbs the rounding.
-  const columnWidths = useMemo(() => {
-    if (!allWidthsKnown || dragging) {
-      return baseWidths;
-    }
-    const dataKeys = columns.filter(column => column.kind !== "actions").map(columnKey);
-    const sumAll = columns.reduce((sum, column) => sum + baseWidths[columnKey(column)], 0);
-    const sumData = dataKeys.reduce((sum, key) => sum + baseWidths[key], 0);
-    const targetData = containerWidth - (sumAll - sumData);
-    if (containerWidth <= sumAll || sumData <= 0 || dataKeys.length === 0) {
-      return baseWidths;
-    }
-    const next = { ...baseWidths };
-    let used = 0;
-    dataKeys.forEach((key, index) => {
-      next[key] = index === dataKeys.length - 1 ? targetData - used : Math.round(targetData * (baseWidths[key] / sumData));
-      used += next[key];
-    });
-    return next;
-  }, [allWidthsKnown, dragging, columns, baseWidths, containerWidth]);
-
-  const totalWidth = allWidthsKnown
-    ? columns.reduce((sum, column) => sum + columnWidths[columnKey(column)], 0)
-    : undefined;
-
-  // Stable ref callback per column key, so the header refs aren't detached and re-attached on every render.
+  // Stable ref callbacks per key so refs aren't detached and re-attached on every render.
   const setHeaderRef = (key: string) => {
-    if (!refSetters.current[key]) {
-      refSetters.current[key] = el => {
+    if (!headerRefSetters.current[key]) {
+      headerRefSetters.current[key] = el => {
         headerRefs.current[key] = el;
       };
     }
-    return refSetters.current[key];
+    return headerRefSetters.current[key];
+  };
+  const setColRef = (key: string) => {
+    if (!colRefSetters.current[key]) {
+      colRefSetters.current[key] = el => {
+        colRefs.current[key] = el;
+      };
+    }
+    return colRefSetters.current[key];
   };
 
   const startResize = (event: ReactMouseEvent, key: string) => {
+    // Before widths are seeded (empty table) a drag would write a bogus tiny
+    // width on the table element that React never rewrites; ignore it.
+    if (totalWidth == null) {
+      return;
+    }
     event.preventDefault();
-    // Freeze every column at its rendered (post-fill) width so entering drag-mode doesn't jump the layout.
-    setBaseWidths(prev => {
-      const next = { ...prev };
-      for (const column of columns) {
-        const key = columnKey(column);
-        const el = headerRefs.current[key];
-        if (el) {
-          next[key] = Math.round(el.getBoundingClientRect().width);
-        }
-      }
-      return next;
-    });
-    setDragging(true);
-    const startX = event.clientX;
-    const th = (event.currentTarget as HTMLElement).parentElement;
-    const startWidth = th ? Math.round(th.getBoundingClientRect().width) : MIN_COLUMN_WIDTH;
+    // The handle sits directly inside its data-column <th>.
+    const th = (event.currentTarget as HTMLElement).parentElement!;
+    const startWidth = widths[key];
     // A column can't shrink below its header content, otherwise the header would overlap the next column.
-    const minWidth = Math.max(MIN_COLUMN_WIDTH, th ? headerContentWidth(th) : MIN_COLUMN_WIDTH);
-    draggingRef.current = false;
+    const minWidth = Math.max(MIN_COLUMN_WIDTH, headerContentWidth(th));
+    const startX = event.clientX;
+    const startTotal = totalWidth;
+    let finalWidth = startWidth;
+    draggedRef.current = false;
 
     const onMove = (moveEvent: MouseEvent) => {
-      if (moveEvent.clientX !== startX) {
-        draggingRef.current = true;
+      // A mouseup outside the window is never delivered; end the drag on the first buttonless move.
+      if (moveEvent.buttons === 0) {
+        onUp();
+        return;
       }
-      setBaseWidths(prev => ({
-        ...prev,
-        [key]: Math.max(minWidth, Math.round(startWidth + moveEvent.clientX - startX)),
-      }));
+      if (moveEvent.clientX !== startX) {
+        draggedRef.current = true;
+      }
+      finalWidth = Math.max(minWidth, Math.round(startWidth + moveEvent.clientX - startX));
+      // Resize the <col> imperatively so mousemove doesn't re-render the table.
+      const colEl = colRefs.current[key];
+      if (colEl) {
+        colEl.style.width = `${finalWidth}px`;
+      }
+      if (tableRef.current) {
+        tableRef.current.style.width = `${startTotal - startWidth + finalWidth}px`;
+      }
     };
 
     const cleanup = () => {
@@ -370,14 +384,16 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
 
     const onUp = () => {
       cleanup();
-      setDragging(false);
-      setBaseWidths(prev => {
-        saveColumnWidths(tableId, prev);
-        return prev;
-      });
+      // A click without movement would commit identical widths and re-render for nothing.
+      if (!draggedRef.current) {
+        return;
+      }
+      const next = { ...widths, [key]: finalWidth };
+      saveColumnWidths(tableId, next, columns.map(columnKey));
+      setWidths(next);
       // Let the click that follows mouseup read the drag flag (to skip sorting) before it is reset.
       setTimeout(() => {
-        draggingRef.current = false;
+        draggedRef.current = false;
       }, 0);
     };
 
@@ -389,13 +405,15 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
   };
 
   return {
-    columnWidths,
+    widths,
     allWidthsKnown,
     totalWidth,
     containerRef,
+    tableRef,
     setHeaderRef,
+    setColRef,
     startResize,
-    isResizing: () => draggingRef.current,
+    isResizing: () => draggedRef.current,
   };
 }
 
@@ -413,18 +431,20 @@ function TruncatingCell({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [truncated, setTruncated] = useState(false);
+  // Depend on the extracted text, not the ReactNode: render() returns a fresh
+  // element identity every render, which would force a layout read per cell.
+  const text = extractText(content);
   useLayoutEffect(() => {
     const el = ref.current;
     setTruncated(!!el && el.scrollWidth > el.clientWidth);
-  }, [content, fixed, maxWidth, columnWidth]);
+  }, [text, fixed, maxWidth, columnWidth]);
   return (
     <td className="text-nowrap">
       <div
         ref={ref}
         className="truncate-cell"
-        // During the measuring pass `maxWidth` sets the column's width, so it seeds at exactly that size.
         style={!fixed && maxWidth != null ? { width: maxWidth } : undefined}
-        title={truncated ? extractText(content) || undefined : undefined}
+        title={truncated ? text || undefined : undefined}
       >
         {content}
       </div>
@@ -437,7 +457,6 @@ export default function Table<Row extends RowWithId>({
   data,
   loading,
   perPage: perPageInitial = 5,
-  rowKey,
   tableId,
   search,
   pagination,
@@ -462,7 +481,12 @@ export default function Table<Row extends RowWithId>({
   );
   const [activeSort, setActiveSort] = useControllableState(!!onSortChange, sort, onSortChange, defaultSort);
 
-  const { filteredData, visibleData, numPages } = useTableData({
+  const {
+    filteredData,
+    visibleData,
+    numPages,
+    page: currentPage,
+  } = useTableData({
     columns,
     data,
     serverMode,
@@ -473,12 +497,22 @@ export default function Table<Row extends RowWithId>({
     totalPages: pagination?.totalPages,
   });
   const hasRows = !loading && visibleData.length > 0;
+
+  // Keyed on data so it only reacts to a fresh backend response: totalPages is stale while a fetch is in flight
+  // (e.g. navigating back to a URL with another page size), and acting on it then would redirect wrongly.
+  useEffect(() => {
+    if (serverMode && numPages > 0 && currentPage > numPages) {
+      (pagination.onPageOutOfRange ?? pagination.onPageChange)(numPages);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   const resize = useResizableColumns(columns, tableId, hasRows);
 
-  const pagesList = useMemo(() => Array.from({ length: numPages }, (_, i) => i + PAGE_FLOOR), [numPages]);
+  const totalRows = pagination?.totalRows ?? filteredData.length;
 
   const sortKeyOf = (column: DataColumn<Row>) => (serverMode ? column.sortKey : (column.sortKey ?? column.header));
-  const isSortable = (column: DataColumn<Row>) => (serverMode ? !!column.sortKey : column.sortable !== false);
+  const isSortable = (column: DataColumn<Row>) => !serverMode || !!column.sortKey;
 
   const handleSearch = (value: string) => {
     // Controlled search resets the page through the parent; only reset it ourselves in client mode.
@@ -489,8 +523,11 @@ export default function Table<Row extends RowWithId>({
   };
 
   const handlePerPage = (value: number) => {
+    // Controlled pagination resets the page through the parent; only reset it ourselves in client mode.
+    if (!pagination) {
+      setPage(PAGE_FLOOR);
+    }
     setPerPage(value);
-    setPage(PAGE_FLOOR);
   };
 
   const handleHeaderClick = (column: DataColumn<Row>) => {
@@ -502,6 +539,16 @@ export default function Table<Row extends RowWithId>({
       setActiveSort(cycleSort(activeSort, key));
     }
   };
+
+  // Empty column inserted before the actions column; it absorbs leftover container
+  // width so resizing one column never changes the others.
+  const actionsIndex = columns.findIndex(column => column.kind === "actions");
+  const fillerIndex = actionsIndex === -1 ? columns.length : actionsIndex;
+  const withFiller = (cells: ReactNode[], filler: ReactNode) => [
+    ...cells.slice(0, fillerIndex),
+    filler,
+    ...cells.slice(fillerIndex),
+  ];
 
   return (
     <Card className="!relative !gap-0 !p-0">
@@ -519,31 +566,36 @@ export default function Table<Row extends RowWithId>({
           </span>
         )}
       </Flex>
-      <div className="grid gap-2">
+      <div className="grid gap-2 pb-2">
         <div className="overflow-x-auto" ref={resize.containerRef}>
           <table
+            ref={resize.tableRef}
             className="resizable-table"
             style={
               resize.allWidthsKnown
-                ? // Fixed layout: columnWidths fill the container (min-width 100%) or overflow it; width matches their sum.
-                  { tableLayout: "fixed", width: resize.totalWidth, minWidth: "100%" }
+                ? { tableLayout: "fixed", width: resize.totalWidth, minWidth: "100%" }
                 : hasRows
-                  ? // Measuring pass: size to the natural content so columns seed at their real width, not squeezed.
+                  ? // Measuring pass: size to natural content so columns seed at their real width.
                     { tableLayout: "auto", width: "max-content" }
-                  : // Empty / loading: nothing to measure yet, just fill the container.
-                    { tableLayout: "auto", width: "100%" }
+                  : { tableLayout: "auto", width: "100%" }
             }
           >
             <colgroup>
-              {columns.map((column, idx) => {
-                const width = resize.columnWidths[columnKey(column)];
-                return <col key={`col-${idx}`} style={width != null ? { width } : undefined} />;
-              })}
+              {withFiller(
+                columns.map((column, idx) => {
+                  const key = columnKey(column);
+                  const width = resize.widths[key];
+                  return (
+                    <col key={`col-${idx}`} ref={resize.setColRef(key)} style={width != null ? { width } : undefined} />
+                  );
+                }),
+                <col key="col-filler" />
+              )}
             </colgroup>
-            {columns.length > 0 && (
-              <thead>
-                <tr>
-                  {columns.map((column, idx) => {
+            <thead>
+              <tr>
+                {withFiller(
+                  columns.map((column, idx) => {
                     if (column.kind === "actions") {
                       return (
                         <th
@@ -579,69 +631,72 @@ export default function Table<Row extends RowWithId>({
                         />
                       </th>
                     );
-                  })}
-                </tr>
-              </thead>
-            )}
+                  }),
+                  <th key="h-filler" aria-hidden className="!p-0" />
+                )}
+              </tr>
+            </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: Math.min(perPage, 5) }).map((_, i) => (
                   <tr key={`s-${i}`}>
-                    {columns.map((_, j) => (
-                      <td key={`s-${i}-${j}`}>
-                        <Shimmer />
-                      </td>
-                    ))}
+                    {withFiller(
+                      columns.map((_, j) => (
+                        <td key={`s-${i}-${j}`}>
+                          <Shimmer />
+                        </td>
+                      )),
+                      <td key={`s-${i}-filler`} aria-hidden data-filler className="!p-0" />
+                    )}
                   </tr>
                 ))
               ) : visibleData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={columns.length || 1}
+                    colSpan={columns.length + 1}
                     className="border-t-[1px] border-[color:var(--border-primary)] text-center font-thin italic opacity-50"
                   >
                     No results available
                   </td>
                 </tr>
               ) : (
-                visibleData.map((row, i) => (
-                  <tr key={rowKey ? rowKey(row, i) : row.id}>
-                    {columns.map((column, j) => {
-                      if (column.kind === "actions") {
+                visibleData.map(row => (
+                  <tr key={row.id}>
+                    {withFiller(
+                      columns.map((column, j) => {
+                        if (column.kind === "actions") {
+                          return (
+                            <td key={j} className="sticky right-0" data-buttons-cell>
+                              {column.render(row)}
+                            </td>
+                          );
+                        }
                         return (
-                          <td key={j} className="sticky right-0" data-buttons-cell>
-                            {column.render(row)}
-                          </td>
+                          <TruncatingCell
+                            key={j}
+                            content={column.render(row)}
+                            fixed={resize.allWidthsKnown}
+                            maxWidth={column.maxWidth}
+                            columnWidth={resize.widths[column.header]}
+                          />
                         );
-                      }
-                      return (
-                        <TruncatingCell
-                          key={j}
-                          content={column.render(row)}
-                          fixed={resize.allWidthsKnown}
-                          maxWidth={column.maxWidth}
-                          columnWidth={resize.columnWidths[column.header]}
-                        />
-                      );
-                    })}
+                      }),
+                      <td key="filler" aria-hidden data-filler className="!p-0" />
+                    )}
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
-        <div>
-          <Paginator
-            currentPage={page}
-            perPage={perPage}
-            pagesList={pagesList}
-            filteredData={filteredData}
-            backendTotalRows={pagination?.totalRows}
-            setCurrentPage={setPage}
-            setPerPage={handlePerPage}
-          />
-        </div>
-        <div /> {/* Empty element just to even the last element gap */}
+        <Paginator
+          currentPage={currentPage}
+          numPages={numPages}
+          perPage={perPage}
+          totalRows={totalRows}
+          setCurrentPage={setPage}
+          setPerPage={handlePerPage}
+        />
       </div>
     </Card>
   );

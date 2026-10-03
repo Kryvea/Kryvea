@@ -1,89 +1,82 @@
 import { parseAsInteger, parseAsString, parseAsStringEnum, useQueryStates } from "nuqs";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocation } from "react-router";
-
-type SortState = { key: string; order: "asc" | "desc" };
+import { SortState } from "../types/utils.types";
 
 type Options = {
-  namespace?: string;
   defaultLimit?: number;
   defaultSort?: SortState;
 };
 
 const tableQueryOptions = { history: "push" as const, shallow: false };
 
-export function useTableUrlState({ namespace = "", defaultLimit = 25, defaultSort }: Options = {}) {
-  const keys = useMemo(() => {
-    const prefix = namespace ? `${namespace}_` : "";
-    return {
-      query: `${prefix}query`,
-      page: `${prefix}page`,
-      limit: `${prefix}limit`,
-      sort_field: `${prefix}sort_field`,
-      sort_order: `${prefix}sort_order`,
-    };
-  }, [namespace]);
-
+export function useTableUrlState({ defaultLimit = 25, defaultSort }: Options = {}) {
   const parsers = useMemo(
     () => ({
-      [keys.query]: parseAsString.withDefault("").withOptions({ throttleMs: 400, clearOnDefault: false }),
-      [keys.page]: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: false }),
-      [keys.limit]: parseAsInteger.withDefault(defaultLimit).withOptions({ clearOnDefault: false }),
-      [keys.sort_field]: parseAsString,
-      [keys.sort_order]: parseAsStringEnum(["asc", "desc"] as const),
+      query: parseAsString.withDefault("").withOptions({ throttleMs: 400, clearOnDefault: false }),
+      page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: false }),
+      limit: parseAsInteger.withDefault(defaultLimit).withOptions({ clearOnDefault: false }),
+      sort_field: parseAsString,
+      sort_order: parseAsStringEnum(["asc", "desc"] as const),
     }),
-    [keys, defaultLimit]
+    [defaultLimit]
   );
 
   const [params, setParams] = useQueryStates(parsers, tableQueryOptions);
   const location = useLocation();
 
   useEffect(() => {
-    const next: Record<string, string | number> = {
-      [keys.query]: params[keys.query] as string,
-      [keys.page]: params[keys.page] as number,
-      [keys.limit]: params[keys.limit] as number,
-    };
-    if (params[keys.sort_field] == null && defaultSort) {
-      next[keys.sort_field] = defaultSort.key;
-      next[keys.sort_order] = defaultSort.order;
-    }
-    setParams(next, { history: "replace" });
+    setParams(
+      {
+        query: params.query,
+        page: params.page,
+        limit: params.limit,
+        ...(params.sort_field == null && defaultSort
+          ? { sort_field: defaultSort.key, sort_order: defaultSort.order }
+          : {}),
+      },
+      { history: "replace" }
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Derived from the same location the page fetches on, so the fetch never fires against the still-bare URL.
-  const ready = new URLSearchParams(location.search).has(keys.limit);
-
-  const queryValue = (params[keys.query] as string | null) ?? "";
-  const sortField = params[keys.sort_field] as string | null;
-  const sortOrder = params[keys.sort_order] as "asc" | "desc" | null;
-  const page = (params[keys.page] as number | null) ?? 1;
-  const perPage = (params[keys.limit] as number | null) ?? defaultLimit;
+  // Every key the mount effect writes must be present, or a partial deep link (e.g. only ?limit=) fetches twice.
+  // sort_field is required only until the first sync: afterwards clearing the sort legitimately removes it.
+  const urlParams = new URLSearchParams(location.search);
+  const syncedRef = useRef(false);
+  const ready =
+    ["query", "page", "limit"].every(key => urlParams.has(key)) &&
+    (syncedRef.current || !defaultSort || urlParams.has("sort_field"));
+  if (ready) {
+    syncedRef.current = true;
+  }
 
   return {
     ready,
     search: {
-      value: queryValue,
-      onChange: (q: string) => setParams({ [keys.query]: q, [keys.page]: 1 }),
+      value: params.query,
+      onChange: (q: string) => setParams({ query: q, page: 1 }),
     },
-    sort: sortField ? { key: sortField, order: sortOrder ?? "asc" } : undefined,
+    sort: params.sort_field ? { key: params.sort_field, order: params.sort_order ?? "asc" } : undefined,
     onSortChange: (s: SortState | undefined) =>
-      setParams({ [keys.sort_field]: s?.key ?? null, [keys.sort_order]: s?.order ?? null, [keys.page]: 1 }),
+      setParams({ sort_field: s?.key ?? null, sort_order: s?.order ?? null, page: 1 }),
     pagination: {
-      page,
-      perPage,
-      onPageChange: (p: number) => setParams({ [keys.page]: p }),
-      onPerPageChange: (l: number) => setParams({ [keys.limit]: l, [keys.page]: 1 }),
+      page: params.page,
+      perPage: params.limit,
+      onPageChange: (p: number) => setParams({ page: p }),
+      // Replace, not push: otherwise Back returns to the out-of-range page and gets redirected again.
+      onPageOutOfRange: (lastPage: number) => setParams({ page: lastPage }, { history: "replace" }),
+      onPerPageChange: (l: number) => setParams({ limit: l, page: 1 }),
     },
     // Restore defaults rather than clearing: a bare URL makes the backend fall back to its own page size/sort.
     reset: () =>
       setParams({
-        [keys.query]: "",
-        [keys.page]: 1,
-        [keys.limit]: defaultLimit,
-        [keys.sort_field]: defaultSort?.key ?? null,
-        [keys.sort_order]: defaultSort?.order ?? null,
+        query: "",
+        page: 1,
+        limit: defaultLimit,
+        sort_field: defaultSort?.key ?? null,
+        sort_order: defaultSort?.order ?? null,
       }),
   };
 }

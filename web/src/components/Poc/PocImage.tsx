@@ -1,30 +1,31 @@
 import { mdiImage } from "@mdi/js";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { memo, useEffect } from "react";
 import { getBlob } from "../../api/api";
 import { uuidZero } from "../../types/common.types";
-import Grid from "../Composition/Grid";
+import { ImageUploadField, imageFileFromItems, isAcceptedImageFile, useImageUpload } from "../Form/ImageUpload";
 import Input from "../Form/Input";
 import Textarea from "../Form/Textarea";
-import UploadFile from "../Form/UploadFile";
-import { PocDoc, PocImageDoc } from "./Poc.types";
+import { PocImageDoc } from "./Poc.types";
 import PocTemplate from "./PocTemplate";
 
 export type PocImageProps = {
   pocDoc: PocImageDoc;
-  currentIndex;
-  pocList: PocDoc[];
-  onPositionChange: (currentIndex: number) => (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onTextChange: <T>(currentIndex, key: keyof Omit<T, "key">) => (e: React.ChangeEvent) => void;
-  onImageChange: (currentIndex, image: File) => void;
-  onRemovePoc: (currentIndex: number) => void;
+  currentIndex: number;
+  pocListLength: number;
+  onPositionChange: (currentIndex: number) => (newIndex: number) => void;
+  onTextChange: <T>(currentIndex: number, key: keyof Omit<T, "key">) => (e: React.ChangeEvent) => void;
+  onImageChange: (currentIndex: number, image: File | undefined) => void;
+  onRemovePoc: (currentIndex: number) => () => void;
   selectedPoc: number;
   setSelectedPoc: (index: number) => void;
 };
 
-export default function PocImage({
+const blobToFile = (blob: Blob, filename: string): File => new File([blob], filename, { type: blob.type });
+
+export default memo(function PocImage({
   pocDoc,
   currentIndex,
-  pocList,
+  pocListLength,
   onPositionChange,
   onTextChange,
   onImageChange,
@@ -32,42 +33,34 @@ export default function PocImage({
   selectedPoc,
   setSelectedPoc,
 }: PocImageProps) {
-  const [imageUrl, setImageUrl] = useState<string>();
-  const [filename, setFilename] = useState<string>(pocDoc?.image_filename);
-  const imageInput = useRef<HTMLInputElement>(null);
+  const upload = useImageUpload({
+    initialFilename: pocDoc?.image_filename,
+    onSelect: file => onImageChange(currentIndex, file),
+    onClear: () => onImageChange(currentIndex, undefined),
+  });
 
-  const handleDrop = pocTemplateRef => (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    document.dispatchEvent(new MouseEvent("dragend", { bubbles: true }));
-    pocTemplateRef.current?.classList.remove("dragged-over");
-
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const file = files[0];
-      if (file.type === "image/png" || file.type === "image/jpeg") {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-      }
-
-      setFilename(file.name);
-      setImageUrl(URL.createObjectURL(file));
-      onImageChange(currentIndex, file);
+    if (files.length > 0 && isAcceptedImageFile(files[0])) {
+      upload.selectImageFile(files[0]);
     }
   };
-
-  const blobToFile = useCallback((blob: Blob, filename: string): File => {
-    return new File([blob], filename, { type: blob.type });
-  }, []);
 
   useEffect(() => {
     if (pocDoc.image_id == undefined || pocDoc.image_id === uuidZero) {
       return;
     }
+    // The poc may be deleted while its blob is still downloading.
+    let cancelled = false;
     getBlob(`/api/files/images/${pocDoc.image_id}`, data => {
-      onImageChangeWrapper({ target: { files: [blobToFile(data, pocDoc.image_filename)] } });
+      if (!cancelled) {
+        upload.selectImageFile(blobToFile(data, pocDoc.image_filename));
+      }
     });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -75,23 +68,9 @@ export default function PocImage({
       return;
     }
     const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) {
-        return;
-      }
-
-      for (const item of items) {
-        if (item.kind === "file") {
-          const file = item.getAsFile();
-
-          if (!file || (file.type !== "image/png" && file.type !== "image/jpeg")) {
-            continue;
-          }
-
-          setFilename(file.name);
-          setImageUrl(URL.createObjectURL(file));
-          onImageChange(currentIndex, file);
-        }
+      const file = imageFileFromItems(e.clipboardData?.items);
+      if (file) {
+        upload.selectImageFile(file);
       }
     };
 
@@ -99,52 +78,8 @@ export default function PocImage({
     return () => {
       document.removeEventListener("paste", handlePaste);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPoc, currentIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (!imageUrl) {
-        return;
-      }
-
-      URL.revokeObjectURL(imageUrl);
-    };
-  }, [imageUrl]);
-
-  const onImageChangeWrapper = ({ target: { files } }) => {
-    if (!files || !files[0]) {
-      return;
-    }
-
-    const image_file: File = files[0];
-
-    // const checkFilenameDuplicate = (pocs: PocDoc[]) =>
-    //   pocs.some((poc, i) => {
-    //     if (poc.type !== POC_TYPE_IMAGE || image_file.name !== poc?.image_file?.name) {
-    //       return false;
-    //     }
-
-    //     toast.error(`Image with name ${image_file.name} already exists in the list at index ${i + 1}.`);
-    //     return true;
-    //   });
-
-    // if (checkFilenameDuplicate(pocList)) {
-    //   imageInput.current.value = ""; // clean implicit default input change behaviour
-    //   return;
-    // }
-
-    setFilename(image_file.name);
-    setImageUrl(URL.createObjectURL(image_file));
-    onImageChange(currentIndex, image_file);
-  };
-
-  const clearImage = e => {
-    e.preventDefault();
-    imageInput.current.value = "";
-    setFilename("");
-    setImageUrl(undefined);
-    onImageChange(currentIndex, undefined);
-  };
 
   const descriptionTextareaId = `poc-description-${currentIndex}-${pocDoc.key}`;
   const imageInputId = `poc-image-${currentIndex}-${pocDoc.key}`;
@@ -155,7 +90,7 @@ export default function PocImage({
       {...{
         pocDoc,
         currentIndex,
-        pocList,
+        pocListLength,
         handleDrop,
         icon: mdiImage,
         onPositionChange,
@@ -172,19 +107,7 @@ export default function PocImage({
         onChange={onTextChange<PocImageDoc>(currentIndex, "description")}
       />
 
-      <Grid>
-        <UploadFile
-          label="Choose Image"
-          inputId={imageInputId}
-          filename={filename}
-          inputRef={imageInput}
-          name={"imagePoc"}
-          accept={"image/png, image/jpeg"}
-          onChange={onImageChangeWrapper}
-          onButtonClick={clearImage}
-        />
-        {imageUrl && <img src={imageUrl} alt="Selected image preview" className="max-h-[550px] w-fit object-contain" />}
-      </Grid>
+      <ImageUploadField inputId={imageInputId} upload={upload} />
 
       <Input
         type="text"
@@ -195,4 +118,4 @@ export default function PocImage({
       />
     </PocTemplate>
   );
-}
+});
