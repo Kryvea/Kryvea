@@ -211,10 +211,10 @@ function useTableData<Row>(params: {
 
   const filteredData = useMemo(() => {
     if (!searching) {
-      return data;
+      return data ?? [];
     }
     const q = query.toLowerCase();
-    return data.filter((_, index) => searchableText[index].some(text => text.includes(q)));
+    return data.filter((_, index) => searchableText[index].some(text => text.includes(q))) ?? [];
   }, [searching, query, data, searchableText]);
 
   const sortedData = useMemo(() => {
