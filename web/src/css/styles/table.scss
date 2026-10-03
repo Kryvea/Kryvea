@@ -37,7 +37,8 @@ table td {
 }
 
 // "N/A" for empty cells. The resizable table wraps content in .truncate-cell, so there the div (not the td) is empty.
-table td:empty::after,
+// The filler column ([data-filler]) is empty by design and must not show the placeholder.
+table td:empty:not([data-filler])::after,
 .resizable-table .truncate-cell:empty::after {
   content: "N/A";
   font-weight: 100;

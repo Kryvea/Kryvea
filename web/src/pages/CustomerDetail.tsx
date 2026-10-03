@@ -17,6 +17,7 @@ import Buttons from "../components/Form/Buttons";
 import Input from "../components/Form/Input";
 import SelectWrapper from "../components/Form/SelectWrapper";
 import { SelectOption } from "../components/Form/SelectWrapper.types";
+import { ACCEPTED_IMAGE_TYPES, isAcceptedImageFile } from "../components/Form/ImageUpload";
 import UploadFile from "../components/Form/UploadFile";
 import { Customer, Template, uuidZero } from "../types/common.types";
 import { languageMapping, USER_ROLE_ADMIN } from "../utils/constants";
@@ -177,7 +178,7 @@ export default function CustomerDetail() {
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!["image/png", "image/jpeg"].includes(file.type)) {
+    if (!isAcceptedImageFile(file)) {
       e.target.value = "";
       return;
     }
@@ -289,7 +290,7 @@ export default function CustomerDetail() {
                 <input
                   id="change-logo"
                   type="file"
-                  accept="image/png, image/jpeg"
+                  accept={ACCEPTED_IMAGE_TYPES}
                   style={{ display: "none" }}
                   onChange={handleLogoChange}
                 />

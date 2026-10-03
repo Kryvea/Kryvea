@@ -1,6 +1,5 @@
 import { mdiPencil } from "@mdi/js";
-import { ChangeEvent, useState } from "react";
-import { Keys } from "../../types/utils.types";
+import { ChangeEvent, memo, useState } from "react";
 import Flex from "../Composition/Flex";
 import Grid from "../Composition/Grid";
 import Input from "../Form/Input";
@@ -8,38 +7,38 @@ import SelectWrapper from "../Form/SelectWrapper";
 import { SelectOption } from "../Form/SelectWrapper.types";
 import Textarea from "../Form/Textarea";
 import { MonacoTextSelection } from "./MonacoCodeEditor.types";
-import { PocDoc, PocTextDoc } from "./Poc.types";
+import { PocTextDoc } from "./Poc.types";
 import PocCodeEditor from "./PocCodeEditor";
 import PocTemplate from "./PocTemplate";
 
 type PocTextProps = {
   pocDoc: PocTextDoc;
-  currentIndex;
-  pocList: PocDoc[];
+  currentIndex: number;
+  pocListLength: number;
   selectedPoc: number;
   setSelectedPoc: (index: number) => void;
-  onPositionChange: (currentIndex: number) => (e: ChangeEvent<HTMLInputElement>) => void;
-  onTextChange: <T>(currentIndex, key: keyof Omit<T, "key">) => (e: ChangeEvent) => void;
-  onRemovePoc: (currentIndex: number) => void;
+  onPositionChange: (currentIndex: number) => (newIndex: number) => void;
+  onTextChange: <T>(currentIndex: number, key: keyof Omit<T, "key">) => (e: ChangeEvent) => void;
+  onValueChange: <T>(currentIndex: number, key: keyof Omit<T, "key">, value: string | number) => void;
+  onRemovePoc: (currentIndex: number) => () => void;
   onSetCodeSelection: <T>(
     currentIndex: number,
     property: keyof Omit<T, "key">,
     textSelection: MonacoTextSelection[]
   ) => void;
-  onStartingLineNumberChange?: <T>(currentIndex, property: keyof Omit<T, "key">) => (num: number) => void;
 };
 
-export default function PocText({
+export default memo(function PocText({
   pocDoc,
   currentIndex,
-  pocList,
+  pocListLength,
   selectedPoc,
   setSelectedPoc,
   onPositionChange,
   onTextChange,
+  onValueChange,
   onRemovePoc,
   onSetCodeSelection,
-  onStartingLineNumberChange,
 }: PocTextProps) {
   const [languageOptions, setLanguageOptions] = useState<SelectOption[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<SelectOption>({
@@ -52,8 +51,7 @@ export default function PocText({
   const languageInputId = `poc-language-${currentIndex}-${pocDoc.key}`;
   const startingLineNumberId = `poc-starting-line-number-${currentIndex}-${pocDoc.key}`;
 
-  // Should only be called once when the MonacoEditor initializes
-  const onLanguageOptionsInit = options => {
+  const onLanguageOptionsInit = (options: SelectOption[]) => {
     setLanguageOptions(options);
     setSelectedLanguage({
       label: options.find(option => option.value === pocDoc.text_language)?.label,
@@ -66,7 +64,7 @@ export default function PocText({
       {...{
         pocDoc,
         currentIndex,
-        pocList,
+        pocListLength,
         icon: mdiPencil,
         onPositionChange,
         onRemovePoc,
@@ -94,19 +92,14 @@ export default function PocText({
             <SelectWrapper
               label="Language"
               className="w-64"
-              options={languageOptions.map(({ label, value }) => ({ label, value }))}
+              options={languageOptions}
               value={{
                 label: selectedLanguage.label || pocDoc.text_language,
                 value: selectedLanguage.value || pocDoc.text_language,
               }}
               onChange={selected => {
                 setSelectedLanguage(selected);
-                onTextChange<PocTextDoc>(
-                  currentIndex,
-                  "text_language"
-                )({
-                  target: { value: selected.value },
-                } as any);
+                onValueChange<PocTextDoc>(currentIndex, "text_language", selected.value);
               }}
               id={languageInputId}
             />
@@ -116,7 +109,7 @@ export default function PocText({
               type="number"
               value={pocDoc?.starting_line_number}
               min={1}
-              onChange={onStartingLineNumberChange<PocTextDoc>(currentIndex, "starting_line_number")}
+              onChange={num => onValueChange<PocTextDoc>(currentIndex, "starting_line_number", num)}
               id={startingLineNumberId}
             />
           </Flex>
@@ -129,21 +122,14 @@ export default function PocText({
             code={pocDoc.text_data}
             disableViewHighlights={(pocDoc?.text_highlights ?? []).length <= 0}
             currentIndex={currentIndex}
-            highlightsProperty={"text_highlights" as Keys<PocTextDoc>}
+            highlightsProperty="text_highlights"
             lineWrapId="text"
             onSetCodeSelection={onSetCodeSelection}
-            onChange={code =>
-              onTextChange<PocTextDoc>(
-                currentIndex,
-                "text_data"
-              )({
-                target: { value: code },
-              } as any)
-            }
+            onChange={code => onValueChange<PocTextDoc>(currentIndex, "text_data", code)}
             onLanguageOptionsInit={onLanguageOptionsInit}
           />
         </Grid>
       </Grid>
     </PocTemplate>
   );
-}
+});
