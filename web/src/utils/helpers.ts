@@ -63,16 +63,16 @@ export const getSidebarItems: (ctxCustomer: Customer, navigate: NavigateFunction
         {
           label: ctxCustomer.name,
           icon: mdiDomain,
-          href: `/customers/${ctxCustomer.id}/assessments`,
+          href: `/customers/${ctxCustomer.id}`,
           menu: [
             {
-              href: `/customers/${ctxCustomer.id}/assessments`,
+              href: `/customers/${ctxCustomer.id}`,
               icon: mdiTabSearch,
               label: "Assessments",
             },
             { href: `/customers/${ctxCustomer.id}/targets`, icon: mdiTarget, label: "Targets" },
             {
-              href: `/customers/${ctxCustomer.id}`,
+              href: `/customers/${ctxCustomer.id}/details`,
               icon: mdiAccountEdit,
               label: "Edit Customer",
             },

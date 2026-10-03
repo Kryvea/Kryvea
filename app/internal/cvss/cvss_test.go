@@ -47,7 +47,7 @@ func TestParseVector(t *testing.T) {
 
 		// Test cases for CVSS31
 		{
-			name:             "Valid CVSS3 vector",
+			name:             "Valid CVSS31 vector",
 			vector:           "CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:L/E:P/RL:X/RC:X",
 			version:          Cvss31,
 			expectedScore:    4.4,
@@ -94,16 +94,16 @@ func TestParseVector(t *testing.T) {
 				if err == nil {
 					t.Errorf("Expected error but got none")
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Did not expect an error but got: %v", err)
-				}
-				if vector.Score != tc.expectedScore {
-					t.Errorf("Expected score %v but got %v", tc.expectedScore, vector.Score)
-				}
-				if vector.Severity != tc.expectedSeverity {
-					t.Errorf("Expected severity %v but got %v", tc.expectedSeverity, vector.Severity)
-				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Did not expect an error but got: %v", err)
+			}
+			if vector.Score != tc.expectedScore {
+				t.Errorf("Expected score %v but got %v", tc.expectedScore, vector.Score)
+			}
+			if vector.Severity != tc.expectedSeverity {
+				t.Errorf("Expected severity %v but got %v", tc.expectedSeverity, vector.Severity)
 			}
 		})
 	}

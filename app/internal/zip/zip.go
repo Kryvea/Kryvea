@@ -2,11 +2,14 @@ package zip
 
 import (
 	"archive/zip"
+	"errors"
 	"io"
 	"time"
 
 	"github.com/xuri/excelize/v2"
 )
+
+var ErrEmptyPath = errors.New("path must not be empty")
 
 type Writer struct {
 	zipWriter *zip.Writer
@@ -51,6 +54,10 @@ func (w *Writer) AddExcelize(xl *excelize.File, path string) error {
 }
 
 func (w *Writer) AddDirectory(path string) error {
+	if path == "" {
+		return ErrEmptyPath
+	}
+
 	if path[len(path)-1] != '/' {
 		path += "/"
 	}

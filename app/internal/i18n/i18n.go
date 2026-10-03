@@ -2,7 +2,7 @@ package i18n
 
 import (
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/bytedance/sonic"
@@ -12,30 +12,29 @@ import (
 
 var bundle *i18n.Bundle
 
-// copy LocalizeConfig
-type LocalizeConfig struct {
-	MessageID    string
-	TemplateData map[string]string
-}
-
 func InitI18n(localesPath string) error {
 	bundle = i18n.NewBundle(language.English) // default fallback
 	bundle.RegisterUnmarshalFunc("json", sonic.Unmarshal)
 
-	err := filepath.Walk(localesPath, func(path string, info os.FileInfo, err error) error {
+	return filepath.WalkDir(localesPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && filepath.Ext(path) == ".json" {
+		if !d.IsDir() && filepath.Ext(path) == ".json" {
 			if _, err := bundle.LoadMessageFile(path); err != nil {
 				return fmt.Errorf("failed to load locale file %s: %w", path, err)
 			}
 		}
 		return nil
 	})
-	return err
 }
 
 func NewLocalizer(lang string) *i18n.Localizer {
-	return i18n.NewLocalizer(bundle, lang)
+	b := bundle
+	if b == nil {
+		// InitI18n has not been called (e.g. in tests): fall back to an
+		// empty bundle so lookups fail gracefully instead of panicking.
+		b = i18n.NewBundle(language.English)
+	}
+	return i18n.NewLocalizer(b, lang)
 }

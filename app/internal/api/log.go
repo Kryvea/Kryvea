@@ -24,7 +24,6 @@ func (d *Driver) GetLog(c *fiber.Ctx) error {
 		zerolog.PanicLevel,
 	}
 
-	// initialize all levels to false
 	levelsMap := make(map[string]bool, len(allLevels))
 	for _, lvl := range allLevels {
 		levelsMap[lvl.String()] = false
@@ -62,13 +61,9 @@ func (d *Driver) GetLog(c *fiber.Ctx) error {
 		pageSizeInt = 0
 	}
 
-	// open log file
 	file, err := os.Open(log.GetLogPath())
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Failed to open log file",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Failed to open log file")
 	}
 	defer file.Close()
 
@@ -88,7 +83,6 @@ func (d *Driver) GetLog(c *fiber.Ctx) error {
 			continue
 		}
 
-		// retrieve the log level from the JSON entry
 		levelNode, err := sonic.Get(logEntry, "level")
 		if err != nil {
 			continue
@@ -99,9 +93,8 @@ func (d *Driver) GetLog(c *fiber.Ctx) error {
 			continue
 		}
 
-		// if log level is in the specified levels and within pagination range
-		// append to results
-		if levelsMap[levelStr] && (line >= start && (pageSizeInt == 0 || line < end)) {
+		// append entries within the pagination range
+		if line >= start && (pageSizeInt == 0 || line < end) {
 			results = append(results, logEntry)
 		}
 

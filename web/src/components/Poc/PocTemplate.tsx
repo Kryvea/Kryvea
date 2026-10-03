@@ -1,53 +1,64 @@
 import { mdiDelete } from "@mdi/js";
-import { useRef } from "react";
+import React, { ReactNode, useState } from "react";
 import Flex from "../Composition/Flex";
 import Icon from "../Composition/Icon";
 import Button from "../Form/Button";
 import Buttons from "../Form/Buttons";
 import Input from "../Form/Input";
+import { PocDoc } from "./Poc.types";
+
+type PocTemplateProps = {
+  icon: string;
+  title: string;
+  pocDoc: PocDoc;
+  currentIndex: number;
+  pocListLength: number;
+  onPositionChange: (currentIndex: number) => (newIndex: number) => void;
+  onRemovePoc: (currentIndex: number) => () => void;
+  selectedPoc: number;
+  setSelectedPoc: (index: number) => void;
+  handleDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
+  children: ReactNode;
+};
 
 export default function PocTemplate({
   icon,
   title,
   pocDoc,
   currentIndex,
-  pocList,
+  pocListLength,
   onPositionChange,
   onRemovePoc,
   selectedPoc,
   setSelectedPoc,
-  handleDrop = () => () => {},
+  handleDrop = () => {},
   children,
-}: {
-  pocList: any[];
-  [key: string | number | symbol]: any;
-}) {
-  const dropRef = useRef<HTMLDivElement>(null);
-  const dragCounter = useRef(0);
+}: PocTemplateProps) {
+  const [isDraggedOver, setIsDraggedOver] = useState(false);
 
   const positionInputId = `poc-position-${currentIndex}-${pocDoc.key}`;
 
   return (
     <div
-      ref={dropRef}
-      className="poc-template"
+      className={isDraggedOver ? "poc-template dragged-over" : "poc-template"}
       data-type={pocDoc.type}
       data-focused={selectedPoc === currentIndex}
       onDragEnter={e => {
         e.preventDefault();
-        dropRef.current?.classList.add("dragged-over");
+        setIsDraggedOver(true);
       }}
       onDragLeave={e => {
         e.preventDefault();
-        dropRef.current?.classList.remove("dragged-over");
+        setIsDraggedOver(false);
       }}
       onDragOver={e => {
         e.preventDefault();
-        dropRef.current?.classList.add("dragged-over");
+        setIsDraggedOver(true);
       }}
       onDrop={e => {
         e.preventDefault();
-        handleDrop(dropRef)(e); // Pass event down
+        setIsDraggedOver(false);
+        handleDrop(e);
       }}
       onClick={() => setSelectedPoc(currentIndex)}
       data-name="poc-template"
@@ -72,8 +83,8 @@ export default function PocTemplate({
             id={positionInputId}
             value={currentIndex + 1}
             min={1}
-            max={pocList.length}
-            onChange={e => onPositionChange(currentIndex)(e - 1)}
+            max={pocListLength}
+            onChange={newPosition => onPositionChange(currentIndex)(newPosition - 1)}
           />
 
           <Buttons>
@@ -89,11 +100,9 @@ export default function PocTemplate({
               variant="tertiary"
               text="Move Down"
               small
-              disabled={currentIndex === pocList.length - 1}
+              disabled={currentIndex === pocListLength - 1}
               onClick={() =>
-                onPositionChange(currentIndex)(
-                  currentIndex >= pocList.length - 1 ? pocList.length - 1 : currentIndex + 1
-                )
+                onPositionChange(currentIndex)(currentIndex >= pocListLength - 1 ? pocListLength - 1 : currentIndex + 1)
               }
             />
           </Buttons>

@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
@@ -24,53 +25,25 @@ type categoryRequestData struct {
 }
 
 func (d *Driver) AddCategory(c *fiber.Ctx) error {
-	// parse request body
 	data := &categoryRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	errStr := d.validateCategoryData(data)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	category := &mongo.Category{
-		Identifier:         data.Identifier,
-		Name:               data.Name,
-		Subcategory:        data.Subcategory,
-		GenericDescription: data.GenericDescription,
-		GenericRemediation: data.GenericRemediation,
-		LanguagesOrder:     data.LanguagesOrder,
-		References:         data.References,
-		Source:             data.Source,
-	}
+	category := categoryFromRequestData(data)
 
-	// insert category into database
-	categoryID, err := d.mongo.Category().Insert(context.Background(), category)
+	categoryID, err := d.db.Category().Insert(c.UserContext(), category)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-
-		if mongo.IsDuplicateKeyError(err) {
-			subcategory := ""
-			if category.Subcategory != "" {
-				subcategory = fmt.Sprintf(" (%s)", category.Subcategory)
-			}
-			return c.JSON(fiber.Map{
-				"error": fmt.Sprintf("Category \"%s %s%s\" already exists", category.Identifier, category.Name, subcategory),
-			})
+		if errors.Is(err, store.ErrDuplicateKey) {
+			return jsonError(c, fiber.StatusBadRequest, categoryExistsMessage(category))
 		}
 
-		return c.JSON(fiber.Map{
-			"error": "Cannot create category",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot create category")
 	}
 
 	c.Status(fiber.StatusCreated)
@@ -81,62 +54,30 @@ func (d *Driver) AddCategory(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateCategory(c *fiber.Ctx) error {
-	// parse category param
-	category, errStr := d.categoryFromParam(c.Params("category"))
+	category, errStr := d.categoryFromParam(c.UserContext(), c.Params("category"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// parse request body
 	data := &categoryRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	errStr = d.validateCategoryData(data)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	newCategory := &mongo.Category{
-		Identifier:         data.Identifier,
-		Name:               data.Name,
-		Subcategory:        data.Subcategory,
-		GenericDescription: data.GenericDescription,
-		GenericRemediation: data.GenericRemediation,
-		LanguagesOrder:     data.LanguagesOrder,
-		References:         data.References,
-		Source:             data.Source,
-	}
+	newCategory := categoryFromRequestData(data)
 
-	// update category in database
-	err := d.mongo.Category().Update(context.Background(), category.ID, newCategory)
+	err := d.db.Category().Update(c.UserContext(), category.ID, newCategory)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-
-		if mongo.IsDuplicateKeyError(err) {
-			subcategory := ""
-			if newCategory.Subcategory != "" {
-				subcategory = fmt.Sprintf(" (%s)", newCategory.Subcategory)
-			}
-			return c.JSON(fiber.Map{
-				"error": fmt.Sprintf("Category \"%s %s%s\" already exists", newCategory.Identifier, newCategory.Name, subcategory),
-			})
+		if errors.Is(err, store.ErrDuplicateKey) {
+			return jsonError(c, fiber.StatusBadRequest, categoryExistsMessage(newCategory))
 		}
 
-		return c.JSON(fiber.Map{
-			"error": "Cannot update category",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot update category")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -146,35 +87,13 @@ func (d *Driver) UpdateCategory(c *fiber.Ctx) error {
 }
 
 func (d *Driver) DeleteCategory(c *fiber.Ctx) error {
-	// parse category param
-	category, errStr := d.categoryFromParam(c.Params("category"))
+	category, errStr := d.categoryFromParam(c.UserContext(), c.Params("category"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// delete category from database
-		err := d.mongo.Category().Delete(ctx, category.ID)
-		if err != nil {
-			return nil, errors.New("Cannot delete category")
-		}
-
-		return nil, err
-	})
-	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+	if err := d.db.Category().Delete(c.UserContext(), category.ID); err != nil {
+		return jsonError(c, fiber.StatusBadRequest, "Cannot delete category")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -186,18 +105,12 @@ func (d *Driver) DeleteCategory(c *fiber.Ctx) error {
 func (d *Driver) SearchCategories(c *fiber.Ctx) error {
 	query := c.Query("query")
 	if query == "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Query is required",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Query is required")
 	}
 
-	categories, err := d.mongo.Category().Search(context.Background(), query)
+	categories, err := d.db.Category().Search(c.UserContext(), query)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot search categories",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot search categories")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -205,12 +118,9 @@ func (d *Driver) SearchCategories(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetCategories(c *fiber.Ctx) error {
-	categories, err := d.mongo.Category().GetAll(context.Background())
+	categories, err := d.db.Category().GetAll(c.UserContext())
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get categories",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get categories")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -218,12 +128,9 @@ func (d *Driver) GetCategories(c *fiber.Ctx) error {
 }
 
 func (d *Driver) ExportCategories(c *fiber.Ctx) error {
-	categories, err := d.mongo.Category().GetAll(context.Background())
+	categories, err := d.db.Category().GetAll(c.UserContext())
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get categories",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get categories")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -232,13 +139,9 @@ func (d *Driver) ExportCategories(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetCategory(c *fiber.Ctx) error {
-	// parse category param
-	category, errStr := d.categoryFromParam(c.Params("category"))
+	category, errStr := d.categoryFromParam(c.UserContext(), c.Params("category"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	c.Status(fiber.StatusOK)
@@ -246,68 +149,36 @@ func (d *Driver) GetCategory(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UploadCategories(c *fiber.Ctx) error {
-	// parse override parameter
 	override := c.FormValue("override")
 
-	// parse request body
 	dataBytes, err := util.ParseFormFile(c, "categories")
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse categories file",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot parse categories file")
 	}
 
 	var data []categoryRequestData
 	err = sonic.Unmarshal(dataBytes, &data)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate each category data
 	for _, categoryData := range data {
 		errStr := d.validateCategoryData(&categoryData)
 		if errStr != "" {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{
-				"error": errStr,
-			})
+			return jsonError(c, fiber.StatusBadRequest, errStr)
 		}
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	categories, err := session.WithTransaction(func(ctx context.Context) (any, error) {
+	categories, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		categories := make([]uuid.UUID, 0, len(data))
 
-		// insert each category into database
 		for _, categoryData := range data {
-			category := &mongo.Category{
-				Identifier:         categoryData.Identifier,
-				Name:               categoryData.Name,
-				Subcategory:        categoryData.Subcategory,
-				GenericDescription: categoryData.GenericDescription,
-				GenericRemediation: categoryData.GenericRemediation,
-				LanguagesOrder:     categoryData.LanguagesOrder,
-				References:         categoryData.References,
-				Source:             categoryData.Source,
-			}
+			category := categoryFromRequestData(&categoryData)
 
-			categoryID, err := d.mongo.Category().Upsert(ctx, category, override == "true")
+			categoryID, err := d.db.Category().Upsert(ctx, category, override == "true")
 			if err != nil {
-				if mongo.IsDuplicateKeyError(err) {
-					subcategory := ""
-					if category.Subcategory != "" {
-						subcategory = fmt.Sprintf(" (%s)", category.Subcategory)
-					}
-					return nil, fmt.Errorf("Category \"%s %s%s\" already exists", category.Identifier, category.Name, subcategory)
+				if errors.Is(err, store.ErrDuplicateKey) {
+					return nil, errors.New(categoryExistsMessage(category))
 				}
 
 				return nil, fmt.Errorf("Cannot create category \"%s %s\"", category.Identifier, category.Name)
@@ -318,10 +189,7 @@ func (d *Driver) UploadCategories(c *fiber.Ctx) error {
 		return categories, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	c.Status(fiber.StatusCreated)
@@ -331,22 +199,29 @@ func (d *Driver) UploadCategories(c *fiber.Ctx) error {
 	})
 }
 
-func (d *Driver) categoryFromParam(categoryParam string) (*mongo.Category, string) {
-	if categoryParam == "" {
-		return nil, "Category ID is required"
-	}
+func (d *Driver) categoryFromParam(ctx context.Context, categoryParam string) (*model.Category, string) {
+	return fromParam(ctx, categoryParam, "Category", d.db.Category().GetByID)
+}
 
-	categoryID, err := util.ParseUUID(categoryParam)
-	if err != nil {
-		return nil, "Invalid category ID"
+func categoryFromRequestData(data *categoryRequestData) *model.Category {
+	return &model.Category{
+		Identifier:         data.Identifier,
+		Name:               data.Name,
+		Subcategory:        data.Subcategory,
+		GenericDescription: data.GenericDescription,
+		GenericRemediation: data.GenericRemediation,
+		LanguagesOrder:     data.LanguagesOrder,
+		References:         data.References,
+		Source:             data.Source,
 	}
+}
 
-	category, err := d.mongo.Category().GetByID(context.Background(), categoryID)
-	if err != nil {
-		return nil, "Invalid category ID"
+func categoryExistsMessage(category *model.Category) string {
+	subcategory := ""
+	if category.Subcategory != "" {
+		subcategory = fmt.Sprintf(" (%s)", category.Subcategory)
 	}
-
-	return category, ""
+	return fmt.Sprintf("Category \"%s %s%s\" already exists", category.Identifier, category.Name, subcategory)
 }
 
 func (d *Driver) validateCategoryData(category *categoryRequestData) string {

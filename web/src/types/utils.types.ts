@@ -4,3 +4,5 @@ export type Keys<T> = keyof T;
 export type Values<T> = T[Keys<T>];
 /** Returns union of tuples containing [UNION OF KEYS TYPES, UNION OF VALUES TYPES] from each entry of T */
 export type Entries<T> = [Keys<T>, Values<T>];
+
+export type SortState = { key: string; order: "asc" | "desc" };

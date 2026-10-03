@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect } from "react";
 import Grid from "../Composition/Grid";
+import { ACCEPTED_IMAGE_TYPES, imageFileFromItems, isAcceptedImageFile, useImageUpload } from "./ImageUpload";
 import UploadFile from "./UploadFile";
 
 type UploadImageProps = {
@@ -15,39 +16,17 @@ export default function UploadImage({
   previewHeight = 200,
   name = "image",
 }: UploadImageProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [filename, setFilename] = useState<string>("");
-  const [previewUrl, setPreviewUrl] = useState<string>();
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!["image/png", "image/jpeg"].includes(file.type)) {
-      e.target.value = "";
-      return;
-    }
-
-    setFilename(file.name);
-    setPreviewUrl(URL.createObjectURL(file));
-    onChange(file);
-  };
-
-  const clearImage = (e?: React.MouseEvent) => {
-    e?.preventDefault();
-    if (inputRef.current) inputRef.current.value = "";
-    setFilename("");
-    setPreviewUrl(undefined);
-    onChange(null);
-  };
+  const upload = useImageUpload({
+    onSelect: file => onChange(file),
+    onClear: () => onChange(null),
+  });
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files[0];
-    if (file && ["image/png", "image/jpeg"].includes(file.type)) {
-      setFilename(file.name);
-      setPreviewUrl(URL.createObjectURL(file));
-      onChange(file);
+    if (file && isAcceptedImageFile(file)) {
+      upload.selectImageFile(file);
     }
   };
 
@@ -57,30 +36,16 @@ export default function UploadImage({
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (const item of items) {
-        if (item.kind === "file") {
-          const file = item.getAsFile();
-          if (file && ["image/png", "image/jpeg"].includes(file.type)) {
-            setFilename(file.name);
-            setPreviewUrl(URL.createObjectURL(file));
-            onChange(file);
-          }
-        }
+      const file = imageFileFromItems(e.clipboardData?.items);
+      if (file) {
+        upload.selectImageFile(file);
       }
     };
 
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
-  }, [onChange]);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div onDrop={handleDrop} onDragOver={handleDragOver}>
@@ -88,16 +53,16 @@ export default function UploadImage({
         <UploadFile
           label={label}
           inputId="image-upload-input"
-          filename={filename}
-          inputRef={inputRef}
+          filename={upload.filename}
+          inputRef={upload.inputRef}
           name={name}
-          accept={"image/png, image/jpeg"}
-          onChange={handleFileChange}
-          onButtonClick={clearImage}
+          accept={ACCEPTED_IMAGE_TYPES}
+          onChange={upload.onInputChange}
+          onButtonClick={upload.clearImage}
         />
-        {previewUrl && (
+        {upload.imageUrl && (
           <img
-            src={previewUrl}
+            src={upload.imageUrl}
             alt="Selected image preview"
             className="justify-self-center"
             style={{ maxHeight: `${previewHeight}px` }}

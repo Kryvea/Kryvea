@@ -1,7 +1,6 @@
 package log
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 
@@ -14,40 +13,28 @@ const (
 	logFileName = "kryvea.log"
 )
 
-type levelWriter struct {
-	writer   io.Writer
-	minLevel zerolog.Level
-	maxLevel zerolog.Level
-}
+// logPath is resolved by NewLevelWriter and read back by GetLogPath, whose
+// callers do not have the log configuration at hand.
+var logPath string
 
-func (lw levelWriter) Write(p []byte) (n int, err error) {
-	return lw.writer.Write(p)
-}
+// NewLevelWriter returns a writer that duplicates every log line to
+// stdout and to a size-rotated log file in cfg.Directory.
+func NewLevelWriter(cfg config.Log) zerolog.LevelWriter {
+	logPath = filepath.Join(cfg.Directory, logFileName)
 
-func (lw levelWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
-	if level >= lw.minLevel && level <= lw.maxLevel {
-		return lw.writer.Write(p)
-	}
-	return len(p), nil
-}
-
-func NewLevelWriter(logPath string, maxSizeMB, maxBackups, maxAgeDays int, compress bool) *zerolog.LevelWriter {
 	logWriter := &lumberjack.Logger{
-		Filename:   filepath.Join(logPath, logFileName),
-		MaxSize:    maxSizeMB,
-		MaxBackups: maxBackups,
-		MaxAge:     maxAgeDays,
-		Compress:   compress,
+		Filename:   logPath,
+		MaxSize:    cfg.MaxSizeMB,
+		MaxBackups: cfg.MaxBackups,
+		MaxAge:     cfg.MaxAgeDays,
+		Compress:   cfg.Compress,
 	}
 
-	levelWriter := zerolog.MultiLevelWriter(
-		levelWriter{writer: os.Stdout, minLevel: zerolog.DebugLevel, maxLevel: zerolog.PanicLevel},
-		levelWriter{writer: logWriter, minLevel: zerolog.DebugLevel, maxLevel: zerolog.PanicLevel},
-	)
-
-	return &levelWriter
+	return zerolog.MultiLevelWriter(os.Stdout, logWriter)
 }
 
+// GetLogPath returns the path of the current log file, resolved when
+// NewLevelWriter was called.
 func GetLogPath() string {
-	return filepath.Join(config.GetLogDirectory(), logFileName)
+	return logPath
 }
