@@ -5,16 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
-	"sync"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
-	"github.com/Kryvea/Kryvea/internal/poc"
-	"github.com/Kryvea/Kryvea/internal/safe"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
+
+var hexColorRegex = regexp.MustCompile(`^#?[a-fA-F0-9]{6}$`)
 
 type pocData struct {
 	Index              int                     `json:"index"`
@@ -22,128 +22,97 @@ type pocData struct {
 	Description        string                  `json:"description"`
 	URI                string                  `json:"uri"`
 	Request            string                  `json:"request"`
-	RequestHighlights  []mongo.HighlightedText `json:"request_highlights"`
+	RequestHighlights  []model.HighlightedText `json:"request_highlights"`
 	Response           string                  `json:"response"`
-	ResponseHighlights []mongo.HighlightedText `json:"response_highlights"`
+	ResponseHighlights []model.HighlightedText `json:"response_highlights"`
 	ImageReference     string                  `json:"image_reference"`
 	ImageCaption       string                  `json:"image_caption"`
 	TextLanguage       string                  `json:"text_language"`
 	TextData           string                  `json:"text_data"`
-	TextHighlights     []mongo.HighlightedText `json:"text_highlights"`
+	TextHighlights     []model.HighlightedText `json:"text_highlights"`
 	StartingLineNumber int                     `json:"starting_line_number"`
 }
 
+// hasImage reports whether the PoC carries an image that must be read from the
+// multipart form.
+func hasImage(data pocData) bool {
+	return data.Type == model.PocTypeImage && data.ImageReference != ""
+}
+
 func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// parse vulnerability param
-	vulnerability, errStr := d.vulnerabilityFromParam(c.Params("vulnerability"))
+	vulnerability, errStr := d.vulnerabilityFromParam(c.UserContext(), c.Params("vulnerability"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// get assessment from database
-	assessment, err := d.mongo.Assessment().GetByID(context.Background(), vulnerability.Assessment.ID)
-	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid vulnerability",
-		})
+	if !user.CanAccessCustomer(vulnerability.Customer.ID) {
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
-	// check if user can access the customer
-	if !user.CanAccessCustomer(assessment.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
-	}
-
-	// parse request body
 	pocsData := []pocData{}
 	pocsStr := c.FormValue("pocs")
-	err = sonic.Unmarshal([]byte(pocsStr), &pocsData)
+	err := sonic.Unmarshal([]byte(pocsStr), &pocsData)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	for i := range pocsData {
 		errStr = d.validatePocData(&pocsData[i])
 		if errStr != "" {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{
-				"error": errStr,
-			})
+			return jsonError(c, fiber.StatusBadRequest, errStr)
 		}
 	}
 
-	pocs := make([]mongo.PocItem, len(pocsData))
-	safePocs := safe.New(pocs)
-
-	errorChan := make(chan string, len(pocsData))
-
-	wg := sync.WaitGroup{}
-	// parse image data and insert it into the database
-	for i, data := range pocsData {
-		wg.Add(1)
-		go func(i int, data pocData) {
-			defer wg.Done()
-			imageID := uuid.UUID{}
-			pocImageFilename := ""
-			imageData := []byte{}
-			if data.Type == poc.PocTypeImage && data.ImageReference != "" {
-				imageData, pocImageFilename, err = d.formDataReadImage(c, context.Background(), data.ImageReference)
-				if err != nil {
-					c.Status(fiber.StatusBadRequest)
-
-					switch err {
-					case mongo.ErrFileSizeTooLarge:
-						errorChan <- fmt.Sprintf("PoC %d: Image file size is too large", i)
-						return
-					case mongo.ErrImageTypeNotAllowed:
-						errorChan <- fmt.Sprintf("PoC %d: Image type is not allowed", i)
-						return
-					}
-
-					errorChan <- fmt.Sprintf("PoC %d: Cannot read image data", i)
-					return
-				}
-			}
-			safePocs.Set(i, mongo.PocItem{
-				Index:              data.Index,
-				Type:               data.Type,
-				Description:        data.Description,
-				URI:                data.URI,
-				Request:            data.Request,
-				RequestHighlights:  data.RequestHighlights,
-				Response:           data.Response,
-				ResponseHighlights: data.ResponseHighlights,
-				ImageID:            imageID,
-				ImageData:          imageData,
-				ImageFilename:      pocImageFilename,
-				ImageCaption:       data.ImageCaption,
-				TextLanguage:       data.TextLanguage,
-				TextData:           data.TextData,
-				TextHighlights:     data.TextHighlights,
-				StartingLineNumber: data.StartingLineNumber,
-			})
-		}(i, data)
+	// the size limit is the same for every image, so read it once instead of
+	// once per PoC; text-only upserts skip the query entirely
+	var maxImageSize int64
+	if slices.ContainsFunc(pocsData, hasImage) {
+		maxImageSize, err = d.maxImageSize(c.UserContext())
+		if err != nil {
+			return jsonError(c, fiber.StatusInternalServerError, "Cannot read settings")
+		}
 	}
 
-	wg.Wait()
-	close(errorChan)
-
-	// Collect all errors
+	// the multipart form is already in memory; images are persisted later in the transaction
+	pocs := make([]model.PocItem, len(pocsData))
 	var errs []string
-	for err := range errorChan {
-		errs = append(errs, err)
+	for i, data := range pocsData {
+		var imageData []byte
+		var imageFilename string
+		if hasImage(data) {
+			var err error
+			imageData, imageFilename, err = d.formDataReadImageMax(c, data.ImageReference, maxImageSize)
+			if err != nil {
+				switch {
+				case errors.Is(err, store.ErrFileSizeTooLarge):
+					errs = append(errs, fmt.Sprintf("PoC %d: Image file size is too large", i))
+				case errors.Is(err, store.ErrImageTypeNotAllowed):
+					errs = append(errs, fmt.Sprintf("PoC %d: Image type is not allowed", i))
+				default:
+					errs = append(errs, fmt.Sprintf("PoC %d: Cannot read image data", i))
+				}
+				continue
+			}
+		}
+		pocs[i] = model.PocItem{
+			Index:              data.Index,
+			Type:               data.Type,
+			Description:        data.Description,
+			URI:                data.URI,
+			Request:            data.Request,
+			RequestHighlights:  data.RequestHighlights,
+			Response:           data.Response,
+			ResponseHighlights: data.ResponseHighlights,
+			ImageData:          imageData,
+			ImageFilename:      imageFilename,
+			ImageCaption:       data.ImageCaption,
+			TextLanguage:       data.TextLanguage,
+			TextData:           data.TextData,
+			TextHighlights:     data.TextHighlights,
+			StartingLineNumber: data.StartingLineNumber,
+		}
 	}
 
 	if len(errs) > 0 {
@@ -154,18 +123,14 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 		})
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// TODO: FileReference should also be updated with the pocItem ID
-		// or the poc upsert logic should be reworked
-		pocs := safePocs.GetAll()
+	_, err = d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
 		for i := range pocs {
-			imageID, mime, err := d.mongo.FileReference().Insert(ctx, pocs[i].ImageData)
+			// only image pocs carry image data; skip the file insert for the rest
+			if len(pocs[i].ImageData) == 0 {
+				continue
+			}
+
+			imageID, mime, err := d.db.FileReference().Insert(ctx, pocs[i].ImageData)
 			if err != nil {
 				return nil, fmt.Errorf("PoC %d: Cannot upload image", i)
 			}
@@ -174,13 +139,12 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 			pocs[i].ImageMimeType = mime
 		}
 
-		pocUpsert := &mongo.Poc{
+		pocUpsert := &model.Poc{
 			VulnerabilityID: vulnerability.ID,
 			Pocs:            pocs,
 		}
 
-		// update poc in the database
-		err = d.mongo.Poc().Upsert(ctx, pocUpsert)
+		err = d.db.Poc().Upsert(ctx, pocUpsert)
 		if err != nil {
 			return nil, errors.New("Failed to update PoC")
 		}
@@ -188,12 +152,10 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 		return nil, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
+	d.gcFilesAsync()
 	c.Status(fiber.StatusOK)
 	return c.JSON(fiber.Map{
 		"message": "PoCs updated",
@@ -201,40 +163,24 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetPocsByVulnerability(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// parse vulnerability param
-	vulnerability, errStr := d.vulnerabilityFromParam(c.Params("vulnerability"))
+	vulnerability, errStr := d.vulnerabilityFromParam(c.UserContext(), c.Params("vulnerability"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// get assessment from database
-	assessment, err := d.mongo.Assessment().GetByID(context.Background(), vulnerability.Assessment.ID)
+	if !user.CanAccessCustomer(vulnerability.Customer.ID) {
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
+	}
+
+	poc, err := d.db.Poc().GetByVulnerabilityID(c.UserContext(), vulnerability.ID)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid vulnerability",
-		})
-	}
-
-	if !user.CanAccessCustomer(assessment.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
-	}
-
-	// parse vulnerability param
-	poc, err := d.mongo.Poc().GetByVulnerabilityID(context.Background(), vulnerability.ID)
-	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get PoCs",
-		})
+		if errors.Is(err, store.ErrNotFound) {
+			c.Status(fiber.StatusOK)
+			return c.JSON([]model.PocItem{})
+		}
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get PoCs")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -242,11 +188,10 @@ func (d *Driver) GetPocsByVulnerability(c *fiber.Ctx) error {
 }
 
 func (d *Driver) validatePocData(data *pocData) string {
-	if !poc.IsValidType(data.Type) {
+	if !model.IsValidPocType(data.Type) {
 		return "Invalid PoC type"
 	}
 
-	hexColorRegex := regexp.MustCompile(`^#?[a-fA-F0-9]{6}$`)
 	for i, highlight := range data.RequestHighlights {
 		if highlight.Color != "" && !hexColorRegex.MatchString(highlight.Color) {
 			return fmt.Sprintf("Invalid color format for request highlight %d: %s", i, highlight.Color)
@@ -264,15 +209,15 @@ func (d *Driver) validatePocData(data *pocData) string {
 	}
 
 	switch data.Type {
-	case poc.PocTypeText:
+	case model.PocTypeText:
 		if strings.TrimSpace(data.TextData) == "" {
 			return "Text data cannot be empty"
 		}
-	case poc.PocTypeRequest:
+	case model.PocTypeRequest:
 		if strings.TrimSpace(data.Request) == "" && strings.TrimSpace(data.Response) == "" {
 			return "Request and Response cannot be both empty"
 		}
-	case poc.PocTypeImage:
+	case model.PocTypeImage:
 		if strings.TrimSpace(data.ImageReference) == "" {
 			return "Image reference cannot be empty"
 		}
@@ -280,10 +225,10 @@ func (d *Driver) validatePocData(data *pocData) string {
 		return "Invalid PoC type"
 	}
 
-	data.Description = strings.Trim(data.Description, "\r\n ")
-	data.Request = strings.Trim(data.Request, "\r\n ")
-	data.Response = strings.Trim(data.Response, "\r\n ")
-	data.TextData = strings.Trim(data.TextData, "\r\n ")
+	data.Description = strings.Trim(data.Description, trimCutset)
+	data.Request = strings.Trim(data.Request, trimCutset)
+	data.Response = strings.Trim(data.Response, trimCutset)
+	data.TextData = strings.Trim(data.TextData, trimCutset)
 
 	return ""
 }

@@ -12,7 +12,7 @@ func ParseUUID(id string) (uuid.UUID, error) {
 		return uuid.Nil, err
 	}
 
-	if parsed.Variant() != uuid.RFC4122 || parsed == uuid.Nil {
+	if parsed.Variant() != uuid.RFC4122 {
 		return uuid.Nil, fmt.Errorf("invalid UUID")
 	}
 

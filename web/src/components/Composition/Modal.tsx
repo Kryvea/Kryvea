@@ -29,19 +29,12 @@ export default function Modal({
   const mouseDownRef = useRef<any>(null);
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      switch (event.key) {
-        case "Enter":
-          onConfirm?.();
-          break;
-      }
+    function handleKeyDown(event) {
+      if (event.key === "Enter") onConfirm?.();
     }
-
     document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onConfirm]);
 
   const footer = (
     <Buttons>
@@ -69,7 +62,7 @@ export default function Modal({
           <CardTitle title={title} subtitle={subtitle}>
             {onCancel && <Button variant="transparent" icon={mdiClose} onClick={onCancel} small />}
           </CardTitle>
-          <div className="max-h-[70vh]">{children}</div>
+          <div className="max-h-[70vh] overflow-y-auto pr-2 [scrollbar-gutter:stable]">{children}</div>
         </Card>
       </div>
     </div>

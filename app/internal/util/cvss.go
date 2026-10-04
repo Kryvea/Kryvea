@@ -11,8 +11,8 @@ func GetMaxCvssVersion(versions map[string]bool) string {
 			continue
 		}
 
-		if cvss.VersionToValue[cvssVersion] > maxVersionValue {
-			maxVersionValue = cvss.VersionToValue[cvssVersion]
+		if value := cvss.VersionToValue[cvssVersion]; value > maxVersionValue {
+			maxVersionValue = value
 			maxVersionString = cvssVersion
 		}
 	}

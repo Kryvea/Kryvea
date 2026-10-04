@@ -2,7 +2,7 @@ package engine
 
 import (
 	"github.com/Kryvea/Kryvea/internal/api"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/fiber/v2"
@@ -14,35 +14,30 @@ import (
 type Engine struct {
 	addr        string
 	rootPath    string
-	mongo       *mongo.Driver
-	levelWriter *zerolog.LevelWriter
+	bodyLimit   int
+	db          store.Store
+	levelWriter zerolog.LevelWriter
 }
 
-func NewEngine(addr, rootPath, mongoURI, adminUser, adminPass string, levelWriter *zerolog.LevelWriter) (*Engine, error) {
-	mongo, err := mongo.NewDriver(mongoURI, adminUser, adminPass, levelWriter)
-	if err != nil {
-		return nil, err
-	}
-
+func NewEngine(addr, rootPath string, bodyLimit int, db store.Store, levelWriter zerolog.LevelWriter) *Engine {
 	return &Engine{
 		addr:        addr,
 		rootPath:    rootPath,
-		mongo:       mongo,
+		bodyLimit:   bodyLimit,
+		db:          db,
 		levelWriter: levelWriter,
-	}, nil
+	}
 }
 
 func (e *Engine) Serve() {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
-		// TODO: this is a temporary solution to allow large files
-		BodyLimit: 10000 * 1024 * 1024,
-
-		JSONEncoder: sonic.Marshal,
-		JSONDecoder: sonic.Unmarshal,
+		BodyLimit:             e.bodyLimit * 1024 * 1024,
+		JSONEncoder:           sonic.Marshal,
+		JSONDecoder:           sonic.Unmarshal,
 	})
 
-	logger := zerolog.New(*e.levelWriter).With().
+	logger := zerolog.New(e.levelWriter).With().
 		Str("source", "fiber-engine").
 		Timestamp().Logger()
 
@@ -50,7 +45,7 @@ func (e *Engine) Serve() {
 		Logger: &logger,
 	}))
 
-	api := api.NewDriver(e.mongo, e.levelWriter)
+	api := api.NewDriver(e.db, e.levelWriter)
 
 	apiGroup := app.Group(util.JoinUrlPath(e.rootPath, "api"))
 	apiGroup.Use(api.SessionMiddleware)
@@ -72,9 +67,7 @@ func (e *Engine) Serve() {
 
 		apiGroup.Get("/customers/:customer/targets", api.GetTargetsByCustomer)
 		apiGroup.Get("/targets/:target", api.GetTarget)
-		apiGroup.Post("/targets", api.AddTarget)
-		apiGroup.Patch("/targets/:target", api.UpdateTarget)
-		apiGroup.Delete("/targets/:target", api.DeleteTarget)
+		apiGroup.Patch("/targets/bulk", api.BulkTargets)
 
 		apiGroup.Get("/categories/search", api.SearchCategories)
 		apiGroup.Get("/categories", api.GetCategories)

@@ -27,7 +27,8 @@ func (v *Vector) GenerateVectorDescription(lang string) string {
 		}
 	}
 
-	// Pick correct template based on version
+	// Only these versions have description templates; the other
+	// versions get no generated description.
 	var msgID string
 	switch v.Version {
 	case Cvss31:
@@ -35,7 +36,7 @@ func (v *Vector) GenerateVectorDescription(lang string) string {
 	case Cvss4:
 		msgID = "description.cvss4"
 	default:
-		return LanguageNotSupported
+		return ""
 	}
 
 	description, err := localizer.Localize(&i18n.LocalizeConfig{

@@ -8,7 +8,7 @@ type DescribedCodeProps = {
   children?: React.ReactNode;
 };
 
-export default function DescribedCode({ className, subtitle, text, children }: DescribedCodeProps) {
+export default function DescribedCode({ className = "", subtitle, text, children }: DescribedCodeProps) {
   return (
     <Grid className={`DescribedCode ${className}`}>
       <Subtitle className="opacity-50" text={subtitle} />

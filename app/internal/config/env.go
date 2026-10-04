@@ -3,103 +3,117 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
-const (
-	addrEnv          = "KRYVEA_ADDR"
-	rootPathEnv      = "KRYVEA_ROOT_PATH"
-	mongoURIEnv      = "KRYVEA_MONGO_URI"
-	adminUserEnv     = "KRYVEA_ADMIN_USER"
-	adminPassEnv     = "KRYVEA_ADMIN_PASS"
-	logDirectoryEnv  = "KRYVEA_LOG_DIRECTORY"
-	logMaxSizeMBEnv  = "KRYVEA_LOG_MAX_SIZE_MB"
-	logMaxBackupsEnv = "KRYVEA_LOG_MAX_BACKUPS"
-	logMaxAgeDaysEnv = "KRYVEA_LOG_MAX_AGE_DAYS"
-	logCompressEnv   = "KRYVEA_LOG_COMPRESS"
-	localesPathEnv   = "KRYVEA_LOCALES_PATH"
-)
+// Config is the complete runtime configuration. See Load for the environment
+// variable and default value behind every field.
+type Config struct {
+	Addr        string // KRYVEA_ADDR
+	RootPath    string // KRYVEA_ROOT_PATH
+	BodyLimitMB int    // KRYVEA_BODY_LIMIT_MB
+	LocalesPath string // KRYVEA_LOCALES_PATH
 
-func GetListeningAddr() string {
-	return getEnvConfig(addrEnv, "127.0.0.1:8000")
+	DB    DB
+	Admin Admin
+	Log   Log
 }
 
-func GetRootPath() string {
-	return getEnvConfig(rootPathEnv, "/")
+// DB configures the PostgreSQL connection and the local directory used to
+// store binary file payloads (logo, template files, PoC images). The pool
+// fields map to the database/sql setters of the same name; zero leaves the
+// database/sql default in place.
+type DB struct {
+	DSN      string // KRYVEA_PG_DSN
+	FilesDir string // KRYVEA_FILES_DIR
+
+	MaxOpenConns    int           // KRYVEA_PG_MAX_CONNS
+	MaxIdleConns    int           // KRYVEA_PG_MIN_CONNS, named for deployment compatibility
+	ConnMaxLifetime time.Duration // KRYVEA_PG_MAX_CONN_LIFETIME
+	ConnMaxIdleTime time.Duration // KRYVEA_PG_MAX_CONN_IDLE_TIME
 }
 
-func GetMongoURI() string {
-	return getEnvConfig(mongoURIEnv, "mongodb://user:password@host:27017")
+// Admin holds the credentials of the account created on first startup.
+type Admin struct {
+	User string // KRYVEA_ADMIN_USER
+	Pass string // KRYVEA_ADMIN_PASS
 }
 
-func GetAdminUser() string {
-	return getEnvConfig(adminUserEnv, "kryvea")
+// Log configures the rotating log file written alongside stdout.
+type Log struct {
+	Directory  string // KRYVEA_LOG_DIRECTORY
+	MaxSizeMB  int    // KRYVEA_LOG_MAX_SIZE_MB
+	MaxBackups int    // KRYVEA_LOG_MAX_BACKUPS
+	MaxAgeDays int    // KRYVEA_LOG_MAX_AGE_DAYS
+	Compress   bool   // KRYVEA_LOG_COMPRESS
 }
 
-func GetAdminPass() string {
-	return getEnvConfig(adminPassEnv, "kryveapassword")
-}
+// Load reads the whole configuration from the environment. Every default is
+// the second argument of its getEnv call below. A variable that is unset or
+// malformed falls back to that default, so Load never fails.
+func Load() Config {
+	return Config{
+		Addr:        getEnvStr("KRYVEA_ADDR", "127.0.0.1:8000"),
+		RootPath:    getEnvStr("KRYVEA_ROOT_PATH", "/"),
+		BodyLimitMB: getEnvInt("KRYVEA_BODY_LIMIT_MB", 1_000),
+		LocalesPath: getEnvStr("KRYVEA_LOCALES_PATH", "/etc/kryvea/locales"),
 
-func GetLogDirectory() string {
-	return getEnvConfig(logDirectoryEnv, "/var/log/kryvea/")
-}
+		DB: DB{
+			DSN:             getEnvStr("KRYVEA_PG_DSN", "postgres://kryvea:kryvea@localhost:5432/kryvea?sslmode=disable"),
+			FilesDir:        getEnvStr("KRYVEA_FILES_DIR", "/var/lib/kryvea/files"),
+			MaxOpenConns:    getEnvInt("KRYVEA_PG_MAX_CONNS", 0),
+			MaxIdleConns:    getEnvInt("KRYVEA_PG_MIN_CONNS", 0),
+			ConnMaxLifetime: getEnvDuration("KRYVEA_PG_MAX_CONN_LIFETIME", 0),
+			ConnMaxIdleTime: getEnvDuration("KRYVEA_PG_MAX_CONN_IDLE_TIME", 0),
+		},
 
-func GetLogMaxSizeMB() int {
-	defaultSize := 10
-	size := getEnvConfig(logMaxSizeMBEnv, "")
+		Admin: Admin{
+			User: getEnvStr("KRYVEA_ADMIN_USER", "kryvea"),
+			Pass: getEnvStr("KRYVEA_ADMIN_PASS", "kryveapassword"),
+		},
 
-	maxSize, err := strconv.Atoi(size)
-	if err != nil {
-		return defaultSize
+		Log: Log{
+			Directory:  getEnvStr("KRYVEA_LOG_DIRECTORY", "/var/log/kryvea/"),
+			MaxSizeMB:  getEnvInt("KRYVEA_LOG_MAX_SIZE_MB", 10),
+			MaxBackups: getEnvInt("KRYVEA_LOG_MAX_BACKUPS", 5),
+			MaxAgeDays: getEnvInt("KRYVEA_LOG_MAX_AGE_DAYS", 0),
+			Compress:   getEnvBool("KRYVEA_LOG_COMPRESS", true),
+		},
 	}
-
-	return maxSize
 }
 
-func GetLogMaxBackups() int {
-	defaultBackups := 5
-	backups := os.Getenv(logMaxBackupsEnv)
-
-	maxBackups, err := strconv.Atoi(backups)
-	if err != nil {
-		return defaultBackups
-	}
-
-	return maxBackups
-}
-
-func GetLogMaxAgeDays() int {
-	defaultAge := 0
-	age := os.Getenv(logMaxAgeDaysEnv)
-
-	maxAge, err := strconv.Atoi(age)
-	if err != nil {
-		return defaultAge
-	}
-
-	return maxAge
-}
-
-func GetLogCompress() bool {
-	defaultCompress := true
-	compress := os.Getenv(logCompressEnv)
-
-	compressBool, err := strconv.ParseBool(compress)
-	if err != nil {
-		return defaultCompress
-	}
-
-	return compressBool
-}
-
-func GetLocalesPath() string {
-	return getEnvConfig(localesPathEnv, "/etc/kryvea/locales")
-}
-
-func getEnvConfig(envName, defaultValue string) string {
+func getEnvStr(envName, defaultValue string) string {
 	value := os.Getenv(envName)
 	if value != "" {
 		return value
 	}
 
 	return defaultValue
+}
+
+func getEnvInt(envName string, defaultValue int) int {
+	value, err := strconv.Atoi(os.Getenv(envName))
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
+}
+
+func getEnvBool(envName string, defaultValue bool) bool {
+	value, err := strconv.ParseBool(os.Getenv(envName))
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
+}
+
+func getEnvDuration(envName string, defaultValue time.Duration) time.Duration {
+	value, err := time.ParseDuration(os.Getenv(envName))
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
 }

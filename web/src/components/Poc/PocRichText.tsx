@@ -1,31 +1,30 @@
 import { mdiPencil } from "@mdi/js";
-import Image from '@tiptap/extension-image';
-import { useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import React from "react";
+import React, { memo } from "react";
 import Label from "../Form/Label";
 import Textarea from "../Form/Textarea";
-import { PocDoc, PocRichTextDoc } from "./Poc.types";
+import { PocRichTextDoc } from "./Poc.types";
 import PocTemplate from "./PocTemplate";
 import RichText from "./RichText";
 
 type PocRichTextProps = {
   pocDoc: PocRichTextDoc;
-  currentIndex;
-  pocList: PocDoc[];
-  onPositionChange: (currentIndex: number) => (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onTextChange: <T>(currentIndex, key: keyof Omit<T, "key">) => (e: React.ChangeEvent) => void;
-  onRemovePoc: (currentIndex: number) => void;
+  currentIndex: number;
+  pocListLength: number;
+  onPositionChange: (currentIndex: number) => (newIndex: number) => void;
+  onTextChange: <T>(currentIndex: number, key: keyof Omit<T, "key">) => (e: React.ChangeEvent) => void;
+  onValueChange: <T>(currentIndex: number, key: keyof Omit<T, "key">, value: string) => void;
+  onRemovePoc: (currentIndex: number) => () => void;
   selectedPoc: number;
   setSelectedPoc: (index: number) => void;
 };
 
-export default function PocRichText({
+export default memo(function PocRichText({
   pocDoc,
   currentIndex,
-  pocList,
+  pocListLength,
   onPositionChange,
   onTextChange,
+  onValueChange,
   onRemovePoc,
   selectedPoc,
   setSelectedPoc,
@@ -33,26 +32,12 @@ export default function PocRichText({
   const descriptionTextareaId = `poc-description-${currentIndex}-${pocDoc.key}`;
   const textInputId = `poc-richtext-${currentIndex}-${pocDoc.key}`;
 
-  const editor = useEditor({
-    extensions: [StarterKit, Image],
-    content: pocDoc.rich_text_data || "",
-    onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      onTextChange<PocRichTextDoc>(
-        currentIndex,
-        "rich_text_data"
-      )({
-        target: { value: html },
-      } as any);
-    },
-  });
-
   return (
     <PocTemplate
       {...{
         pocDoc,
         currentIndex,
-        pocList,
+        pocListLength,
         icon: mdiPencil,
         onPositionChange,
         onRemovePoc,
@@ -72,8 +57,11 @@ export default function PocRichText({
 
       <div className="col-span-8 mt-4 grid w-full max-w-full">
         <Label htmlFor={textInputId} text="Rich Text Content" />
-        <RichText />
+        <RichText
+          content={pocDoc.rich_text_data}
+          onChange={html => onValueChange<PocRichTextDoc>(currentIndex, "rich_text_data", html)}
+        />
       </div>
     </PocTemplate>
   );
-}
+});

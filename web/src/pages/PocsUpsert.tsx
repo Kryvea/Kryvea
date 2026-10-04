@@ -1,5 +1,5 @@
 import { mdiFloppy, mdiPlus } from "@mdi/js";
-import { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "react-toastify";
 import { v4 } from "uuid";
@@ -74,10 +74,12 @@ export default function PocsUpsert() {
     window.addEventListener("keydown", onKeyboardShortcut);
     window.addEventListener("dragover", handleDragStart);
     window.addEventListener("dragend", handleDragEnd);
+    window.addEventListener("drop", handleDragEnd);
     return () => {
       window.removeEventListener("keydown", onKeyboardShortcut);
       window.removeEventListener("dragover", handleDragStart);
       window.removeEventListener("dragend", handleDragEnd);
+      window.removeEventListener("drop", handleDragEnd);
     };
   }, []);
 
@@ -90,7 +92,13 @@ export default function PocsUpsert() {
     setSelectedPoc(pocList.length - 1);
   }, [goToBottom]);
 
-  function onSetCodeSelection<T>(currentIndex, property: keyof Omit<T, "key">, highlights: MonacoTextSelection[]) {
+  // Handlers are stable (functional setState, [] deps) so the memoized poc
+  // components only re-render when their own poc changes.
+  const onSetCodeSelection = useCallback(function <T>(
+    currentIndex: number,
+    property: keyof Omit<T, "key">,
+    highlights: MonacoTextSelection[]
+  ) {
     setPocList(prev => {
       const newPocList = [...prev];
       newPocList[currentIndex] = {
@@ -99,30 +107,35 @@ export default function PocsUpsert() {
       };
       return newPocList;
     });
-  }
+  }, []);
 
-  function onTextChange<T>(currentIndex, property: keyof Omit<T, "key">) {
-    return e => {
-      setPocList(prev => {
-        const newText = e.target.value;
-        const newPocList = [...prev];
-        newPocList[currentIndex] = { ...newPocList[currentIndex], [property]: newText };
-        return newPocList;
-      });
-    };
-  }
-
-  function onStartingLineNumberChange<T>(currentIndex, property: keyof Omit<T, "key">) {
-    return num =>
-      setPocList(prev => {
-        const newPocList = [...prev];
-        newPocList[currentIndex] = { ...newPocList[currentIndex], [property]: num };
-        return newPocList;
-      });
-  }
-
-  async function onImageChange(currentIndex, image_file: File | null) {
+  const onValueChange = useCallback(function <T>(
+    currentIndex: number,
+    property: keyof Omit<T, "key">,
+    value: string | number
+  ) {
     setPocList(prev => {
+      const newPocList = [...prev];
+      newPocList[currentIndex] = { ...newPocList[currentIndex], [property]: value };
+      return newPocList;
+    });
+  }, []);
+
+  const onTextChange = useCallback(
+    function <T>(currentIndex: number, property: keyof Omit<T, "key">) {
+      return (e: React.ChangeEvent) =>
+        onValueChange<T>(currentIndex, property, (e.target as HTMLInputElement | HTMLTextAreaElement).value);
+    },
+    [onValueChange]
+  );
+
+  const onImageChange = useCallback((currentIndex: number, image_file: File | null) => {
+    setPocList(prev => {
+      // The image blob arrives asynchronously: the poc may be gone by now.
+      if (prev[currentIndex]?.type !== POC_TYPE_IMAGE) {
+        return prev;
+      }
+
       const newPocList = [...prev];
 
       const image_reference = image_file != null ? `poc-${currentIndex}-image` : undefined;
@@ -135,55 +148,44 @@ export default function PocsUpsert() {
 
       return newPocList;
     });
-  }
+  }, []);
 
-  const onPositionChange = currentIndex => e => {
-    const num = e;
-    const newIndex = +num;
-    const shift = (prev: PocDoc[]) => {
-      if (newIndex < 0 || newIndex >= prev.length) {
-        return prev;
-      }
-
-      const arr = [...prev];
-      const copyCurrent = { ...arr[currentIndex] };
-
-      if (newIndex < currentIndex) {
-        for (let i = currentIndex; i > newIndex; i--) {
-          arr[i] = { ...arr[i - 1] };
+  const onPositionChange = useCallback(
+    (currentIndex: number) => (newIndex: number) => {
+      const shift = (prev: PocDoc[]) => {
+        if (newIndex < 0 || newIndex >= prev.length) {
+          return prev;
         }
-        arr[newIndex] = { ...copyCurrent };
+
+        const arr = [...prev];
+        const [moved] = arr.splice(currentIndex, 1);
+        arr.splice(newIndex, 0, moved);
         return arr;
-      }
+      };
+      const swap = (prev: PocDoc[]) => {
+        if (newIndex < 0 || newIndex >= prev.length) {
+          return prev;
+        }
 
-      for (let i = currentIndex; i < newIndex; i++) {
-        arr[i] = { ...arr[i + 1] };
-      }
-      arr[newIndex] = { ...copyCurrent };
+        const arr = [...prev];
+        [arr[currentIndex], arr[newIndex]] = [arr[newIndex], arr[currentIndex]];
+        return arr;
+      };
+      setPocList(onPositionChangeMode === "shift" ? shift : swap);
+    },
+    [onPositionChangeMode]
+  );
 
-      return arr;
-    };
-    const swap = (prev: PocDoc[]) => {
-      if (newIndex < 0 || newIndex >= prev.length) {
-        return prev;
-      }
-
-      const arr = [...prev];
-      const copyCurrent = { ...arr[currentIndex] };
-      arr[currentIndex] = { ...arr[newIndex] };
-      arr[newIndex] = { ...copyCurrent };
-      return arr;
-    };
-    setPocList(onPositionChangeMode === "shift" ? shift : swap);
-  };
-
-  const onRemovePoc = (currentIndex: number) => () => {
-    setPocList(prev => {
-      const newPocList = [...prev];
-      newPocList.splice(currentIndex, 1);
-      return newPocList;
-    });
-  };
+  const onRemovePoc = useCallback(
+    (currentIndex: number) => () => {
+      setPocList(prev => {
+        const newPocList = [...prev];
+        newPocList.splice(currentIndex, 1);
+        return newPocList;
+      });
+    },
+    []
+  );
 
   const addPoc = (type: PocType) => () => {
     const key = getPocKeyByType(type);
@@ -257,14 +259,14 @@ export default function PocsUpsert() {
             {...{
               currentIndex: i,
               pocDoc,
-              pocList,
+              pocListLength: pocList.length,
               selectedPoc,
               setSelectedPoc,
               onPositionChange,
               onTextChange,
+              onValueChange,
               onRemovePoc,
               onSetCodeSelection,
-              onStartingLineNumberChange,
             }}
             key={pocDoc.key}
           />
@@ -273,7 +275,7 @@ export default function PocsUpsert() {
         const pocImageProps: PocImageProps = {
           currentIndex: i,
           pocDoc,
-          pocList,
+          pocListLength: pocList.length,
           selectedPoc,
           setSelectedPoc,
           onPositionChange,
@@ -288,11 +290,12 @@ export default function PocsUpsert() {
             {...{
               currentIndex: i,
               pocDoc,
-              pocList,
+              pocListLength: pocList.length,
               selectedPoc,
               setSelectedPoc,
               onPositionChange,
               onTextChange,
+              onValueChange,
               onRemovePoc,
               onSetCodeSelection,
             }}
@@ -305,11 +308,12 @@ export default function PocsUpsert() {
             {...{
               currentIndex: i,
               pocDoc,
-              pocList,
+              pocListLength: pocList.length,
               selectedPoc,
               setSelectedPoc,
               onPositionChange,
               onTextChange,
+              onValueChange,
               onRemovePoc,
             }}
             key={pocDoc.key}
