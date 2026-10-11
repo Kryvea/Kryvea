@@ -9,6 +9,7 @@ import Grid from "../components/Composition/Grid";
 import PageHeader from "../components/Composition/PageHeader";
 import Button from "../components/Form/Button";
 import Input from "../components/Form/Input";
+import PasswordPolicies from "../components/Form/PasswordPolicies";
 import { User } from "../types/common.types";
 import { getPageTitle } from "../utils/helpers";
 
@@ -114,14 +115,17 @@ export default function Profile() {
                 value={currentPassword}
                 onChange={e => setCurrentPassword(e.target.value)}
               />
-              <Input
-                type="password"
-                id="new_password"
-                label="New password"
-                helperSubtitle="Required"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-              />
+              <div>
+                <Input
+                  type="password"
+                  id="new_password"
+                  label="New password"
+                  helperSubtitle="Required"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                />
+                <PasswordPolicies />
+              </div>
               <Input
                 type="password"
                 id="confirm_password"
