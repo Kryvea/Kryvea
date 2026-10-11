@@ -1,9 +1,10 @@
+import { ReactNode } from "react";
 import Grid from "./Grid";
 import Subtitle from "./Subtitle";
 
 type DescribedCodeProps = {
   className?: string;
-  subtitle?: string;
+  subtitle?: string | ReactNode;
   text?: string;
   children?: React.ReactNode;
 };
