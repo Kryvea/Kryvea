@@ -83,6 +83,7 @@ const PAGE_FLOOR = 1;
 const WIDTHS_PREFIX = "kryvea:table-widths:";
 const MIN_COLUMN_WIDTH = 48;
 const ACTIONS_KEY = "__actions__";
+const NO_ROWS: never[] = [];
 
 // Width persistence keys columns by header, so data-column headers must be unique within a table.
 const columnKey = <Row,>(column: Column<Row>) => (column.kind === "actions" ? ACTIONS_KEY : column.header);
@@ -211,10 +212,10 @@ function useTableData<Row>(params: {
 
   const filteredData = useMemo(() => {
     if (!searching) {
-      return data ?? [];
+      return data;
     }
     const q = query.toLowerCase();
-    return data.filter((_, index) => searchableText[index].some(text => text.includes(q))) ?? [];
+    return data.filter((_, index) => searchableText[index].some(text => text.includes(q)));
   }, [searching, query, data, searchableText]);
 
   const sortedData = useMemo(() => {
@@ -454,7 +455,7 @@ function TruncatingCell({
 
 export default function Table<Row extends RowWithId>({
   columns,
-  data,
+  data: dataProp,
   loading,
   perPage: perPageInitial = 5,
   tableId,
@@ -464,6 +465,7 @@ export default function Table<Row extends RowWithId>({
   onSortChange,
   defaultSort,
 }: TableProps<Row>) {
+  const data = dataProp ?? NO_ROWS;
   const serverMode = pagination?.totalRows !== undefined;
 
   const [query, setQuery] = useControllableState(!!search, search?.value ?? "", search?.onChange, "");
