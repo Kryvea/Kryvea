@@ -88,6 +88,7 @@ export default function AssessmentVulnerabilities() {
       },
       {
         header: "Target",
+        sortKey: "target",
         maxWidth: "15rem",
         render: vulnerability => getTargetLabel(vulnerability.target),
       },
