@@ -1,4 +1,4 @@
-type LineAndCol = { line: number; col: number };
+export type LineAndCol = { line: number; col: number };
 export type MonacoTextSelection = {
   start: LineAndCol;
   end: LineAndCol;

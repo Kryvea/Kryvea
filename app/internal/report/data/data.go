@@ -4,14 +4,14 @@ import (
 	"time"
 
 	"github.com/Kryvea/Kryvea/internal/cvss"
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/Kryvea/Kryvea/internal/util"
 )
 
 type ReportData struct {
-	Customer                  *mongo.Customer
-	Assessment                *mongo.Assessment
-	Vulnerabilities           []mongo.Vulnerability
+	Customer                  *model.Customer
+	Assessment                *model.Assessment
+	Vulnerabilities           []model.Vulnerability
 	AggregatedVulnerabilities []AggregatedVulnerability
 	DeliveryDateTime          time.Time
 	MaxCVSS                   map[string]cvss.Vector     // maps each cvss version to the vector with the highest score
@@ -39,27 +39,34 @@ func (rd *ReportData) Prepare(sortByCvss string) {
 		maxVersion = util.GetMaxCvssVersion(rd.Assessment.CVSSVersions)
 	}
 
-	// sanitize customer
 	SanitizeCustomer(rd.Customer)
 
-	// sanitize assessment
 	SanitizeAssessment(rd.Assessment)
 
-	// sanitize and sort vulnerabilities
 	SanitizeAndSortVulnerabilities(rd.Vulnerabilities, maxVersion, rd.Assessment.Language)
 
-	// get max cvss
 	rd.MaxCVSS = GetMaxCvss(rd.Vulnerabilities, rd.Assessment.CVSSVersions)
 
 	rd.VulnerabilitiesOverview = getVulnerabilitiesOverview(rd.Vulnerabilities, rd.Assessment.CVSSVersions)
 
-	rd.TargetsCategoryCounter = getTargetsCategoryCounter(rd.Vulnerabilities, maxVersion)
+	rd.TargetsCategoryCounter = getTargetTagCounter(rd.Vulnerabilities, maxVersion)
 
 	rd.OWASPCounter = getOWASPCounter(rd.Vulnerabilities, maxVersion)
 
-	// parse pocitem Highlights
 	parseHighlights(rd.Vulnerabilities)
 
-	// aggregate vulnerabilities
 	rd.AggregatedVulnerabilities = aggregateVulnerabilities(rd.Vulnerabilities)
+}
+
+// PrepareJSON sorts and computes MaxCVSS for a JSON export. Unlike Prepare it
+// does no XML escaping, so serialized text stays verbatim.
+func (rd *ReportData) PrepareJSON(sortByCvss string) {
+	maxVersion := sortByCvss
+	if maxVersion == "" {
+		maxVersion = util.GetMaxCvssVersion(rd.Assessment.CVSSVersions)
+	}
+
+	SortVulnerabilities(rd.Vulnerabilities, maxVersion)
+
+	rd.MaxCVSS = GetMaxCvss(rd.Vulnerabilities, rd.Assessment.CVSSVersions)
 }

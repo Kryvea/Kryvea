@@ -38,6 +38,15 @@ export default function DateCalendar({
     return normalized;
   };
 
+  // A date-only range must cover full days, otherwise a same-day range collapses to an empty window.
+  const boundaryDate = (date: Date, edge: "start" | "end"): Date => {
+    if (showTime) return date;
+    const normalized = new Date(date);
+    const [h, m, s, ms] = edge === "start" ? [0, 0, 0, 0] : [23, 59, 59, 999];
+    normalized.setHours(h, m, s, ms);
+    return normalized;
+  };
+
   const [range, setRange] = useState<[Date | null, Date | null]>([parseDate(value.start), parseDate(value.end)]);
 
   useEffect(() => {
@@ -62,8 +71,8 @@ export default function DateCalendar({
     }
 
     onChange({
-      start: start ? normalizeDate(start).toISOString() : "",
-      end: end ? normalizeDate(end).toISOString() : "",
+      start: start ? boundaryDate(start, "start").toISOString() : "",
+      end: end ? boundaryDate(end, "end").toISOString() : "",
     });
   };
 

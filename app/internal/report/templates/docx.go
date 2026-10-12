@@ -1,14 +1,37 @@
 package templates
 
 import (
+	"errors"
 	"fmt"
 	"text/template"
 
-	"github.com/Kryvea/Kryvea/internal/poc"
-	reportdata "github.com/Kryvea/Kryvea/internal/report/data"
 	gotemplatedocx "github.com/JJJJJJack/go-template-docx"
+	"github.com/Kryvea/Kryvea/internal/model"
+	reportdata "github.com/Kryvea/Kryvea/internal/report/data"
 	"github.com/google/uuid"
 )
+
+var ErrTemplateByteRequired error = errors.New("template required")
+
+// forEachUniquePocImage calls fn once for each distinct image referenced by
+// the vulnerabilities' PoC items.
+func forEachUniquePocImage(vulnerabilities []model.Vulnerability, fn func(reference string, data []byte) error) error {
+	addedImages := make(map[string]bool)
+	for _, vulnerability := range vulnerabilities {
+		for _, pocItem := range vulnerability.Poc.Pocs {
+			if pocItem.Type != model.PocTypeImage || addedImages[pocItem.ImageReference] {
+				continue
+			}
+
+			if err := fn(pocItem.ImageReference, pocItem.ImageData); err != nil {
+				return err
+			}
+			addedImages[pocItem.ImageReference] = true
+		}
+	}
+
+	return nil
+}
 
 type DocxTemplate struct {
 	TemplateBytes []byte
@@ -37,19 +60,10 @@ func (t *DocxTemplate) Render(reportData *reportdata.ReportData, options *report
 		return nil, err
 	}
 
-	addedImages := make(map[string]bool)
-	for _, vulnerability := range reportData.Vulnerabilities {
-		for _, pocItem := range vulnerability.Poc.Pocs {
-			if pocItem.Type == poc.PocTypeImage {
-				if _, ok := addedImages[pocItem.ImageReference]; ok {
-					continue
-				}
-
-				DocxTemplate.Media(pocItem.ImageReference, pocItem.ImageData)
-				addedImages[pocItem.ImageReference] = true
-			}
-		}
-	}
+	forEachUniquePocImage(reportData.Vulnerabilities, func(reference string, data []byte) error {
+		DocxTemplate.Media(reference, data)
+		return nil
+	})
 
 	if reportData.Customer.LogoID != uuid.Nil && reportData.Customer.LogoReference != "" {
 		DocxTemplate.Media(reportData.Customer.LogoReference, reportData.Customer.LogoData)
@@ -75,8 +89,4 @@ func (t *DocxTemplate) Render(reportData *reportdata.ReportData, options *report
 
 func (t *DocxTemplate) Filename() string {
 	return fmt.Sprintf("%s.%s", t.filename, t.extension)
-}
-
-func (t *DocxTemplate) Extension() string {
-	return t.extension
 }

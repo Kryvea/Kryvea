@@ -1,12 +1,8 @@
 import { mdiBroom, mdiClipboardText, mdiEraser, mdiMarker, mdiPalette } from "@mdi/js";
 import type * as monaco from "monaco-editor";
-import { useCallback, useContext, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { GlobalContext } from "../../App";
-import {
-  emptyCurry as curryEmptyFunc,
-  onelineJsonBody as oneLineJsonBody,
-  prettifyJsonBody,
-} from "../../utils/helpers";
+import { emptyCurry, onelineJsonBody, prettifyJsonBody } from "../../utils/helpers";
 import DescribedCode from "../Composition/DescribedCode";
 import Grid from "../Composition/Grid";
 import Modal from "../Composition/Modal";
@@ -16,14 +12,13 @@ import Checkbox from "../Form/Checkbox";
 import ColorPicker from "../Form/ColorPicker";
 import { SelectOption } from "../Form/SelectWrapper.types";
 import MonacoCodeEditor from "./MonacoCodeEditor";
-import { MonacoTextSelection } from "./MonacoCodeEditor.types";
+import { LineAndCol, MonacoTextSelection } from "./MonacoCodeEditor.types";
 import { PocDoc } from "./Poc.types";
 
 type PocCodeEditorProps = {
-  label?: string;
   pocDoc: PocDoc;
-  currentIndex;
-  highlightsProperty;
+  currentIndex: number;
+  highlightsProperty: "request_highlights" | "response_highlights" | "text_highlights";
   code: string;
   disableViewHighlights: boolean;
   selectedLanguage: string;
@@ -32,31 +27,137 @@ type PocCodeEditorProps = {
   onChange?: (value: string) => void;
   onSetCodeSelection?: (currentIndex: number, property: string, textSelection: MonacoTextSelection[]) => void;
   onLanguageOptionsInit?: (options: SelectOption[]) => void;
-  options?: monaco.editor.IStandaloneEditorConstructionOptions;
   lineWrapId?: string;
 };
 
-type Position = { line: number; col: number };
+const NO_HIGHLIGHTS: MonacoTextSelection[] = [];
 
-function getOffset(fullText: string, line: number, col: number): number {
-  const lines = fullText.split("\n");
-  return lines.slice(0, line - 1).reduce((acc, l) => acc + l.length + 1, 0) + (col - 1);
-}
+type LineIndex = {
+  getOffset: (line: number, col: number) => number;
+  offsetToPos: (offset: number) => LineAndCol;
+};
 
-function offsetToPos(fullText: string, offset: number): Position {
-  const lines = fullText.split("\n");
-  let acc = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const len = lines[i].length + 1;
-    if (acc + len > offset) return { line: i + 1, col: offset - acc + 1 };
-    acc += len;
+/** Precomputes a line-offset table so offset<->position conversions don't re-split the document per call. */
+function buildLineIndex(fullText: string): LineIndex {
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < fullText.length; i++) {
+    if (fullText[i] === "\n") {
+      lineStarts.push(i + 1);
+    }
   }
-  return { line: lines.length, col: lines[lines.length - 1].length + 1 };
+
+  // Clamp the line: a stale highlight may point past the end of the current text.
+  const getOffset = (line: number, col: number) =>
+    lineStarts[Math.min(Math.max(line, 1), lineStarts.length) - 1] + (col - 1);
+
+  const offsetToPos = (offset: number): LineAndCol => {
+    // Binary search for the last line starting at or before the offset
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid] <= offset) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    const lineEnd = lo + 1 < lineStarts.length ? lineStarts[lo + 1] - 1 : fullText.length;
+    return { line: lo + 1, col: Math.min(offset, lineEnd) - lineStarts[lo] + 1 };
+  };
+
+  return { getOffset, offsetToPos };
 }
 
-/** @warning This component could probably be better, for instance it is not fully and properly typed, probably it is best to not be used outside of the pocs */
+function subtractSelection(
+  hl: MonacoTextSelection,
+  erase: MonacoTextSelection,
+  fullText: string,
+  { getOffset, offsetToPos }: LineIndex
+): MonacoTextSelection[] {
+  const hlStart = getOffset(hl.start.line, hl.start.col);
+  const hlEnd = getOffset(hl.end.line, hl.end.col);
+  const eraseStart = getOffset(erase.start.line, erase.start.col);
+  const eraseEnd = getOffset(erase.end.line, erase.end.col);
+
+  // No overlap → keep highlight
+  if (eraseEnd <= hlStart || eraseStart >= hlEnd) return [hl];
+
+  const result: MonacoTextSelection[] = [];
+
+  // Left fragment
+  if (eraseStart > hlStart) {
+    const end = offsetToPos(eraseStart);
+    result.push({
+      ...hl,
+      start: hl.start,
+      end,
+      selectionPreview: fullText.slice(hlStart, eraseStart),
+    });
+  }
+
+  // Right fragment
+  if (eraseEnd < hlEnd) {
+    const start = offsetToPos(eraseEnd);
+    result.push({
+      ...hl,
+      start,
+      end: hl.end,
+      selectionPreview: fullText.slice(eraseEnd, hlEnd),
+    });
+  }
+
+  // remove ghost whitespaces highlights
+  return result.filter(r => r.selectionPreview.trim() !== "");
+}
+
+function mergeHighlights(highlights: MonacoTextSelection[], fullText: string): MonacoTextSelection[] {
+  if (highlights.length === 0) return [];
+
+  const { getOffset, offsetToPos } = buildLineIndex(fullText);
+
+  const sorted = [...highlights].sort(
+    (a, b) => getOffset(a.start.line, a.start.col) - getOffset(b.start.line, b.start.col)
+  );
+
+  const merged: MonacoTextSelection[] = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    const curr = sorted[i];
+
+    // Only merge if same color
+    if (last.color !== curr.color) {
+      merged.push(curr);
+      continue;
+    }
+
+    const lastStart = getOffset(last.start.line, last.start.col);
+    const lastEnd = getOffset(last.end.line, last.end.col); // exclusive-style
+    const currStart = getOffset(curr.start.line, curr.start.col);
+    const currEnd = getOffset(curr.end.line, curr.end.col);
+
+    // Merge only when overlapping or exactly adjacent (no gap)
+    if (currStart <= lastEnd) {
+      // new end is the furthest end
+      const newEndOffset = Math.max(lastEnd, currEnd);
+      const newEndPos = offsetToPos(newEndOffset);
+
+      merged[merged.length - 1] = {
+        ...last,
+        end: newEndPos,
+        selectionPreview: fullText.slice(lastStart, newEndOffset),
+      };
+    } else {
+      // there's a gap: keep separate
+      merged.push(curr);
+    }
+  }
+
+  return merged;
+}
+
 export default function PocCodeEditor({
-  label = "",
   pocDoc,
   currentIndex,
   selectedLanguage,
@@ -64,120 +165,36 @@ export default function PocCodeEditor({
   code,
   disableViewHighlights,
   ideStartingLineNumber,
-  textHighlights = [],
+  textHighlights = NO_HIGHLIGHTS,
   onChange = () => {},
   onSetCodeSelection = () => {},
   onLanguageOptionsInit = () => {},
-  options = {},
   lineWrapId = "",
 }: PocCodeEditorProps) {
   const [selectedText, setSelectedText] = useState<MonacoTextSelection[]>([]);
-  const [showHighligtedTextModal, setShowHighlightedTextModal] = useState(false);
+  const [showHighlightedTextModal, setShowHighlightedTextModal] = useState(false);
   const [minimap, setMinimap] = useState(false);
   const [formattingWarning, setFormattingWarning] = useState(false);
-  const [doFormat, setDoFormat] = useState(curryEmptyFunc);
+  const [doFormat, setDoFormat] = useState(emptyCurry);
   const {
     useCtxCodeHighlightColor: [ctxCodeHighlightColor, setCtxCodeHighlightColor],
     useCtxLinewrap: [ctxLineWrap, setCtxLineWrap],
   } = useContext(GlobalContext);
 
-  function subtractSelection(
-    hl: MonacoTextSelection,
-    erase: MonacoTextSelection,
-    fullText: string
-  ): MonacoTextSelection[] {
-    const hlStart = getOffset(fullText, hl.start.line, hl.start.col);
-    const hlEnd = getOffset(fullText, hl.end.line, hl.end.col);
-    const eraseStart = getOffset(fullText, erase.start.line, erase.start.col);
-    const eraseEnd = getOffset(fullText, erase.end.line, erase.end.col);
+  const prepareFormattingWith = (formatFn: (http: string) => [string, number]) => () => {
+    const [httpWithFormattedBody] = formatFn(code);
+    setDoFormat(() => () => onChange(httpWithFormattedBody));
+    setFormattingWarning(true);
+  };
 
-    // No overlap → keep highlight
-    if (eraseEnd <= hlStart || eraseStart >= hlEnd) return [hl];
-
-    const result: MonacoTextSelection[] = [];
-
-    // Left fragment
-    if (eraseStart > hlStart) {
-      const end = offsetToPos(fullText, eraseStart);
-      result.push({
-        ...hl,
-        start: hl.start,
-        end,
-        selectionPreview: fullText.slice(hlStart, eraseStart),
-      });
-    }
-
-    // Right fragment
-    if (eraseEnd < hlEnd) {
-      const start = offsetToPos(fullText, eraseEnd);
-      result.push({
-        ...hl,
-        start,
-        end: hl.end,
-        selectionPreview: fullText.slice(eraseEnd, hlEnd),
-      });
-    }
-
-    // remove ghost whitespaces highlights
-    return result.filter(r => r.selectionPreview.trim() !== "");
-  }
-
-  function mergeHighlights(highlights: MonacoTextSelection[], fullText: string): MonacoTextSelection[] {
-    if (highlights.length === 0) return [];
-
-    const sorted = [...highlights].sort(
-      (a, b) => getOffset(fullText, a.start.line, a.start.col) - getOffset(fullText, b.start.line, b.start.col)
-    );
-
-    const merged: MonacoTextSelection[] = [sorted[0]];
-
-    for (let i = 1; i < sorted.length; i++) {
-      const last = merged[merged.length - 1];
-      const curr = sorted[i];
-
-      // Only merge if same color
-      if (last.color !== curr.color) {
-        merged.push(curr);
-        continue;
-      }
-
-      const lastStart = getOffset(fullText, last.start.line, last.start.col);
-      const lastEnd = getOffset(fullText, last.end.line, last.end.col); // exclusive-style
-      const currStart = getOffset(fullText, curr.start.line, curr.start.col);
-      const currEnd = getOffset(fullText, curr.end.line, curr.end.col);
-
-      // Merge only when overlapping or exactly adjacent (no gap)
-      if (currStart <= lastEnd) {
-        // new end is the furthest end
-        const newEndOffset = Math.max(lastEnd, currEnd);
-        const newEndPos = offsetToPos(fullText, newEndOffset);
-
-        merged[merged.length - 1] = {
-          ...last,
-          end: newEndPos,
-          selectionPreview: fullText.slice(lastStart, newEndOffset),
-        };
-      } else {
-        // there's a gap: keep separate
-        merged.push(curr);
-      }
-    }
-
-    return merged;
-  }
-
-  const prepareFormattingWith = useCallback(
-    formatFn => () => {
-      const [httpWithFormattedBody] = formatFn(code);
-      setDoFormat(() => () => onChange(httpWithFormattedBody));
-      setFormattingWarning(true);
-    },
-    [code]
+  const editorOptions = useMemo<monaco.editor.IStandaloneEditorConstructionOptions>(
+    () => ({ wordWrap: ctxLineWrap ? "on" : "off", minimap: { enabled: minimap } }),
+    [ctxLineWrap, minimap]
   );
 
   return (
     <Grid className="gap-4">
-      {showHighligtedTextModal && (
+      {showHighlightedTextModal && (
         <Modal
           title="Code that will be highlighted"
           subtitle="Click on a selected text to remove it"
@@ -216,11 +233,11 @@ export default function PocCodeEditor({
           confirmButtonLabel="Confirm"
           onCancel={() => {
             setFormattingWarning(false);
-            setDoFormat(curryEmptyFunc);
+            setDoFormat(emptyCurry);
           }}
           onConfirm={() => {
             doFormat();
-            setDoFormat(curryEmptyFunc);
+            setDoFormat(emptyCurry);
             setFormattingWarning(false);
           }}
         >
@@ -260,12 +277,13 @@ export default function PocCodeEditor({
             iconSize={24}
             onClick={() => {
               const highlights = pocDoc[highlightsProperty] ?? [];
+              const lineIndex = buildLineIndex(code);
 
               let newHighlights = highlights;
               for (const erase of selectedText) {
                 const updated: MonacoTextSelection[] = [];
                 for (const hl of newHighlights) {
-                  updated.push(...subtractSelection(hl, erase, code));
+                  updated.push(...subtractSelection(hl, erase, code, lineIndex));
                 }
                 newHighlights = updated;
               }
@@ -312,7 +330,7 @@ export default function PocCodeEditor({
                 small
                 variant="outline-only"
                 text="One-Liner JSON"
-                onClick={prepareFormattingWith(oneLineJsonBody)}
+                onClick={prepareFormattingWith(onelineJsonBody)}
               />
             </>
           )}
@@ -331,10 +349,9 @@ export default function PocCodeEditor({
       </Buttons>
 
       <MonacoCodeEditor
-        label={label}
         value={code}
         ideStartingLineNumber={ideStartingLineNumber}
-        textHighlights={formattingWarning ? [] : textHighlights}
+        textHighlights={formattingWarning ? NO_HIGHLIGHTS : textHighlights}
         removeDisappearedHighlights={indexes => {
           const filteredHighlights = pocDoc[highlightsProperty]?.filter((_, i) => !indexes.includes(i));
           onSetCodeSelection(currentIndex, highlightsProperty, filteredHighlights);
@@ -343,7 +360,7 @@ export default function PocCodeEditor({
         language={selectedLanguage}
         onLanguageOptionsInit={onLanguageOptionsInit}
         onChange={onChange}
-        options={{ ...options, wordWrap: ctxLineWrap ? "on" : "off", minimap: { enabled: minimap } }}
+        options={editorOptions}
       />
     </Grid>
   );

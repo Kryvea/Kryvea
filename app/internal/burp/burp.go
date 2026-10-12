@@ -8,6 +8,7 @@ import (
 )
 
 func Parse(content []byte) (*BurpData, error) {
+	content = bytes.Replace(content, []byte(`<?xml version="1.1"?>`), []byte(`<?xml version="1.0"?>`), 1)
 	dec := xml.NewDecoder(bytes.NewReader(content))
 	dec.CharsetReader = charset.NewReaderLabel
 	dec.Strict = false

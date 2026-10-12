@@ -7,88 +7,51 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 type userRequestData struct {
-	DisabledAt     time.Time `json:"disabled_at"`
-	Username       string    `json:"username"`
-	Password       string    `json:"password"`
-	PasswordExpiry time.Time `json:"password_expiry"`
-	Role           string    `json:"role"`
-	Customers      []string  `json:"customers"`
+	Username  string   `json:"username"`
+	Password  string   `json:"password"`
+	Role      string   `json:"role"`
+	Customers []string `json:"customers"`
 }
 
 func (d *Driver) AddUser(c *fiber.Ctx) error {
-	// parse request body
 	data := &userRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
 	data.Username = strings.TrimSpace(data.Username)
 
-	// validate data
 	errStr := d.validateUserData(data)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// TODO: create function to update the customers only, to avoid the use of mongo.Model
-	// parse customer IDs
-	customers := make([]mongo.Customer, len(data.Customers))
-	for i, customerID := range data.Customers {
-		parsedCustomerID, err := util.ParseUUID(customerID)
-		if err != nil {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{
-				"error": "Invalid customer ID",
-			})
-		}
-
-		_, err = d.mongo.Customer().GetByID(context.Background(), parsedCustomerID)
-		if err != nil {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{
-				"error": "Invalid customer ID",
-			})
-		}
-
-		customers[i] = mongo.Customer{
-			Model: mongo.Model{
-				ID: parsedCustomerID,
-			},
-		}
+	customers, errStr := d.customersFromIDs(c.UserContext(), data.Customers)
+	if errStr != "" {
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	user := &mongo.User{
+	user := &model.User{
 		Username:  data.Username,
 		Role:      data.Role,
 		Customers: customers,
 	}
 
-	// insert user into database
-	userID, err := d.mongo.User().Insert(context.Background(), user, data.Password)
+	userID, err := d.db.User().Insert(c.UserContext(), user, data.Password)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-
-		if mongo.IsDuplicateKeyError(err) {
-			return c.JSON(fiber.Map{
-				"error": fmt.Sprintf("User \"%s\" already exists", user.Username),
-			})
+		if errors.Is(err, store.ErrDuplicateKey) {
+			return jsonError(c, fiber.StatusBadRequest, fmt.Sprintf("User \"%s\" already exists", user.Username))
 		}
 
-		return c.JSON(fiber.Map{
-			"error": "Cannot add user",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot add user")
 	}
 
 	c.Status(fiber.StatusCreated)
@@ -106,51 +69,31 @@ type loginRequestData struct {
 func (d *Driver) Login(c *fiber.Ctx) error {
 	data := &loginRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	if data.Username == "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Username is required",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Username is required")
 	}
 
 	if data.Password == "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Password is required",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Password is required")
 	}
 
-	// get session token from database
-	user, err := d.mongo.User().Login(context.Background(), data.Username, data.Password)
+	user, err := d.db.User().Login(c.UserContext(), data.Username, data.Password)
 	if err != nil {
-		if err == mongo.ErrDisabledUser {
-			c.Status(fiber.StatusUnauthorized)
-			return c.JSON(fiber.Map{
-				"error": "User is disabled",
-			})
+		if err == store.ErrDisabledUser {
+			return jsonError(c, fiber.StatusUnauthorized, "User is disabled")
 		}
 
-		c.Status(fiber.StatusUnauthorized)
-		return c.JSON(fiber.Map{
-			"error": "Invalid credentials",
-		})
+		return jsonError(c, fiber.StatusUnauthorized, "Invalid credentials")
 	}
 
 	if user.PasswordExpiry.Before(time.Now()) {
 		util.SetKryveaCookie(c, user.Token.String(), user.TokenExpiry)
 		util.SetKryveaShadowCookie(c, util.CookiePasswordExpired, user.TokenExpiry)
 
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Password expired",
-		})
+		return jsonError(c, fiber.StatusForbidden, "Password expired")
 	}
 
 	c.Locals("user", user)
@@ -163,13 +106,9 @@ func (d *Driver) Login(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetUsers(c *fiber.Ctx) error {
-	// get all users from database
-	users, err := d.mongo.User().GetAll(context.Background())
+	users, err := d.db.User().GetAll(c.UserContext())
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get users",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get users")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -177,13 +116,9 @@ func (d *Driver) GetUsers(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetUsernames(c *fiber.Ctx) error {
-	// get all usernames from database
-	usernames, err := d.mongo.User().GetAllUsernames(context.Background())
+	usernames, err := d.db.User().GetAllUsernames(c.UserContext())
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get usernames",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get usernames")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -191,15 +126,11 @@ func (d *Driver) GetUsernames(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetMe(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// get user from database
-	userData, err := d.mongo.User().Get(context.Background(), user.ID)
+	userData, err := d.db.User().Get(c.UserContext(), user.ID)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get user",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get user")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -207,13 +138,9 @@ func (d *Driver) GetMe(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetUser(c *fiber.Ctx) error {
-	// parse user param
-	user, errStr := d.userFromParam(c.Params("user"))
+	user, errStr := d.userFromParam(c.UserContext(), c.Params("user"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	c.Status(fiber.StatusOK)
@@ -228,79 +155,43 @@ type updateUserRequestData struct {
 }
 
 func (d *Driver) UpdateUser(c *fiber.Ctx) error {
-	currentUser := c.Locals("user").(*mongo.User)
+	currentUser := c.Locals("user").(*model.User)
 
-	// parse user param
-	user, errStr := d.userFromParam(c.Params("user"))
+	user, errStr := d.userFromParam(c.UserContext(), c.Params("user"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	if currentUser.ID == user.ID {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot update self, use dedicated endpoint",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot update self, use dedicated endpoint")
 	}
 
-	// parse request body
 	data := &updateUserRequestData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	errStr = d.validateUserUpdateData(data)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	// TODO: create function to update the customers only, to avoid the use of mongo.Model
-	// parse customer IDs
-	customers := make([]mongo.Customer, len(data.Customers))
-	for i, customerID := range data.Customers {
-		customer, errStr := d.customerFromParam(customerID)
-		if errStr != "" {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{
-				"error": errStr,
-			})
-		}
-
-		customers[i] = mongo.Customer{
-			Model: mongo.Model{
-				ID: customer.ID,
-			},
-		}
+	customers, errStr := d.customersFromIDs(c.UserContext(), data.Customers)
+	if errStr != "" {
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	newUser := &mongo.User{
+	newUser := &model.User{
 		DisabledAt: data.DisabledAt,
 		Username:   data.Username,
 		Role:       data.Role,
 		Customers:  customers,
 	}
 
-	session, err := d.mongo.NewSessionWithLock(mongo.LockAdmin)
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// update user in database
-		err := d.mongo.User().Update(ctx, user.ID, newUser)
+	_, err := d.db.RunInTxWithLock(c.UserContext(), model.LockAdmin, func(ctx context.Context) (any, error) {
+		err := d.db.User().Update(ctx, user.ID, newUser)
 		if err != nil {
-			if mongo.IsDuplicateKeyError(err) {
+			if errors.Is(err, store.ErrDuplicateKey) {
 				return nil, fmt.Errorf("User \"%s\" already exists", newUser.Username)
 			}
 
@@ -310,10 +201,10 @@ func (d *Driver) UpdateUser(c *fiber.Ctx) error {
 		return nil, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		if errors.Is(err, store.ErrLocked) {
+			err = errors.New("Someone else is currently editing users, retry")
+		}
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	c.Status(fiber.StatusOK)
@@ -329,41 +220,26 @@ type updateMeData struct {
 }
 
 func (d *Driver) UpdateMe(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// parse request body
 	data := &updateMeData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
-	errStr := d.validateUpdateMeData(data, user)
+	errStr := d.validateUpdateMeData(c.UserContext(), data, user)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
-	newUser := &mongo.User{
+	newUser := &model.User{
 		Username: data.Username,
 	}
 
-	session, err := d.mongo.NewSessionWithLock(mongo.LockUsername)
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// update user in database
-		err := d.mongo.User().UpdateMe(ctx, user.ID, newUser, data.NewPassword)
+	_, err := d.db.RunInTxWithLock(c.UserContext(), model.LockUsername, func(ctx context.Context) (any, error) {
+		err := d.db.User().UpdateMe(ctx, user.ID, newUser, data.NewPassword)
 		if err != nil {
-			if mongo.IsDuplicateKeyError(err) {
+			if errors.Is(err, store.ErrDuplicateKey) {
 				return nil, fmt.Errorf("User \"%s\" already exists", newUser.Username)
 			}
 
@@ -373,10 +249,10 @@ func (d *Driver) UpdateMe(c *fiber.Ctx) error {
 		return nil, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		if errors.Is(err, store.ErrLocked) {
+			err = errors.New("Someone else is currently editing users, retry")
+		}
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	c.Status(fiber.StatusOK)
@@ -386,44 +262,29 @@ func (d *Driver) UpdateMe(c *fiber.Ctx) error {
 }
 
 func (d *Driver) UpdateOwnedAssessment(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// parse request body
 	type reqData struct {
 		Assessment string `json:"assessment"`
 		IsOwned    bool   `json:"is_owned"`
 	}
 	data := &reqData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
-	assessment, errStr := d.assessmentFromParam(data.Assessment)
+	assessment, errStr := d.assessmentFromParam(c.UserContext(), data.Assessment)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	if !user.CanAccessCustomer(assessment.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
-	// add assessment to user in database
-	err := d.mongo.User().UpdateOwnedAssessment(context.Background(), user.ID, assessment.ID, data.IsOwned)
+	err := d.db.User().UpdateOwnedAssessment(c.UserContext(), user.ID, assessment.ID, data.IsOwned)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot edit owned assessment",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot edit owned assessment")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -433,35 +294,22 @@ func (d *Driver) UpdateOwnedAssessment(c *fiber.Ctx) error {
 }
 
 func (d *Driver) DeleteUser(c *fiber.Ctx) error {
-	// parse user param
 	userID, err := util.ParseUUID(c.Params("user"))
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Invalid user ID")
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// delete user from database
-		err = d.mongo.User().Delete(ctx, userID)
-		if err != nil {
-			return nil, errors.New("Cannot delete user")
-		}
-
-		return nil, nil
+	_, err = d.db.RunInTxWithLock(c.UserContext(), model.LockAdmin, func(ctx context.Context) (any, error) {
+		return nil, d.db.User().Delete(ctx, userID)
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		if errors.Is(err, store.ErrAdminUserRequired) {
+			return jsonError(c, fiber.StatusBadRequest, err.Error())
+		}
+		if errors.Is(err, store.ErrLocked) {
+			return jsonError(c, fiber.StatusBadRequest, "Someone else is currently editing users, retry")
+		}
+		return jsonError(c, fiber.StatusBadRequest, "Cannot delete user")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -471,15 +319,11 @@ func (d *Driver) DeleteUser(c *fiber.Ctx) error {
 }
 
 func (d *Driver) Logout(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// logout user from database
-	err := d.mongo.User().Logout(context.Background(), user.ID)
+	err := d.db.User().Logout(c.UserContext(), user.ID)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot logout user",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot logout user")
 	}
 
 	util.ClearCookies(c)
@@ -491,29 +335,19 @@ func (d *Driver) Logout(c *fiber.Ctx) error {
 }
 
 func (d *Driver) ResetUserPassword(c *fiber.Ctx) error {
-	// parse user param
-	user, errStr := d.userFromParam(c.Params("user"))
+	user, errStr := d.userFromParam(c.UserContext(), c.Params("user"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	newPassword, err := util.GenerateRandomPassword(20)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot generate new password",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot generate new password")
 	}
 
-	err = d.mongo.User().ResetUserPassword(context.Background(), user.ID, newPassword)
+	err = d.db.User().ResetUserPassword(c.UserContext(), user.ID, newPassword)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Password expired, cannot generate reset token",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot reset password")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -524,42 +358,27 @@ func (d *Driver) ResetUserPassword(c *fiber.Ctx) error {
 }
 
 func (d *Driver) ResetPassword(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// parse request body
 	type reqData struct {
 		Password string `json:"password"`
 	}
 	data := &reqData{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
 	if data.Password == "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Password is required",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Password is required")
 	}
 
 	if !util.IsValidPassword(data.Password) {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Password does not meet policy requirements",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Password does not meet policy requirements")
 	}
 
-	// reset password in database
-	err := d.mongo.User().ResetPassword(context.Background(), user, data.Password)
+	err := d.db.User().ResetPassword(c.UserContext(), user, data.Password)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot reset password",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot reset password")
 	}
 
 	util.SetSessionCookies(c, user.Role, user.Token, user.TokenExpiry)
@@ -570,22 +389,49 @@ func (d *Driver) ResetPassword(c *fiber.Ctx) error {
 	})
 }
 
-func (d *Driver) userFromParam(userParam string) (*mongo.User, string) {
-	if userParam == "" {
-		return nil, "User ID is required"
+func (d *Driver) userFromParam(ctx context.Context, userParam string) (*model.User, string) {
+	return fromParam(ctx, userParam, "User", d.db.User().Get)
+}
+
+// customersFromIDs validates that every customer ID exists using a single
+// bulk lookup and returns them as model.Customer references.
+func (d *Driver) customersFromIDs(ctx context.Context, ids []string) ([]model.Customer, string) {
+	customers := make([]model.Customer, len(ids))
+	if len(ids) == 0 {
+		return customers, ""
 	}
 
-	userID, err := util.ParseUUID(userParam)
+	customerIDs := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		parsed, err := util.ParseUUID(id)
+		if err != nil {
+			return nil, "Invalid customer ID"
+		}
+		customerIDs[i] = parsed
+	}
+
+	existing, err := d.db.Customer().ExistingIDs(ctx, customerIDs)
 	if err != nil {
-		return nil, "Invalid user ID"
+		return nil, "Invalid customer ID"
 	}
 
-	user, err := d.mongo.User().Get(context.Background(), userID)
-	if err != nil {
-		return nil, "Invalid user ID"
+	found := make(map[uuid.UUID]struct{}, len(existing))
+	for _, id := range existing {
+		found[id] = struct{}{}
 	}
 
-	return user, ""
+	for i, id := range customerIDs {
+		if _, ok := found[id]; !ok {
+			return nil, "Invalid customer ID"
+		}
+		customers[i] = model.Customer{
+			Model: model.Model{
+				ID: id,
+			},
+		}
+	}
+
+	return customers, ""
 }
 
 func (d *Driver) validateUserData(data *userRequestData) string {
@@ -593,7 +439,7 @@ func (d *Driver) validateUserData(data *userRequestData) string {
 		return "Username is required"
 	}
 
-	if !mongo.IsValidRole(data.Role) {
+	if !model.IsValidRole(data.Role) {
 		return "Invalid role"
 	}
 
@@ -605,14 +451,14 @@ func (d *Driver) validateUserData(data *userRequestData) string {
 }
 
 func (d *Driver) validateUserUpdateData(data *updateUserRequestData) string {
-	if !mongo.IsValidRole(data.Role) {
+	if !model.IsValidRole(data.Role) {
 		return "Invalid role"
 	}
 
 	return ""
 }
 
-func (d *Driver) validateUpdateMeData(data *updateMeData, user *mongo.User) string {
+func (d *Driver) validateUpdateMeData(ctx context.Context, data *updateMeData, user *model.User) string {
 	if data.Username == "" && data.NewPassword == "" {
 		return "No data to update"
 	}
@@ -626,7 +472,7 @@ func (d *Driver) validateUpdateMeData(data *updateMeData, user *mongo.User) stri
 			return "New password cannot be the same as current password"
 		}
 
-		err := d.mongo.User().ValidatePassword(context.Background(), user.ID, data.CurrentPassword)
+		err := d.db.User().ValidatePassword(ctx, user.ID, data.CurrentPassword)
 		if err != nil || !util.IsValidPassword(data.NewPassword) {
 			return "Invalid passwords"
 		}

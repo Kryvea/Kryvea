@@ -40,8 +40,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--password",
         type=str,
-        default="Kryvea123!",
+        default="kryveapassword",
         help="Admin password (default: Kryvea123!)",
+    )
+    parser.add_argument(
+        "--first-login-password",
+        type=str,
+        default="",
+        help="Password to set at first login (default: empty, which means no password change)",
     )
     args = parser.parse_args()
 
@@ -56,6 +62,12 @@ if __name__ == "__main__":
 
     # populate db with test data
     try:
-        data = populate_test(session, args.base_url, args.username, args.password)
+        data = populate_test(
+            session,
+            args.base_url,
+            args.username,
+            args.password,
+            args.first_login_password,
+        )
     except Exception as e:
         print(f"Error populating database: {e}")
