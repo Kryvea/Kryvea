@@ -1,23 +1,24 @@
 import { mdiCableData } from "@mdi/js";
-import React from "react";
+import React, { memo } from "react";
 import Grid from "../Composition/Grid";
 import Input from "../Form/Input";
 import Label from "../Form/Label";
 import Textarea from "../Form/Textarea";
 import { MonacoTextSelection } from "./MonacoCodeEditor.types";
-import { PocDoc, PocRequestResponseDoc } from "./Poc.types";
+import { PocRequestResponseDoc } from "./Poc.types";
 import PocCodeEditor from "./PocCodeEditor";
 import PocTemplate from "./PocTemplate";
 
 type PocRequestResponseProps = {
   pocDoc: PocRequestResponseDoc;
-  currentIndex;
-  pocList: PocDoc[];
+  currentIndex: number;
+  pocListLength: number;
   selectedPoc: number;
   setSelectedPoc: (index: number) => void;
-  onPositionChange: (currentIndex: number) => (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onTextChange: <T>(currentIndex, key: keyof Omit<T, "key">) => (e: React.ChangeEvent) => void;
-  onRemovePoc: (currentIndex: number) => void;
+  onPositionChange: (currentIndex: number) => (newIndex: number) => void;
+  onTextChange: <T>(currentIndex: number, key: keyof Omit<T, "key">) => (e: React.ChangeEvent) => void;
+  onValueChange: <T>(currentIndex: number, key: keyof Omit<T, "key">, value: string) => void;
+  onRemovePoc: (currentIndex: number) => () => void;
   onSetCodeSelection: <T>(
     currentIndex: number,
     property: keyof Omit<T, "key">,
@@ -25,14 +26,20 @@ type PocRequestResponseProps = {
   ) => void;
 };
 
-export default function PocRequestResponse({
+const variants = [
+  { label: "Request", property: "request", highlightsProperty: "request_highlights" },
+  { label: "Response", property: "response", highlightsProperty: "response_highlights" },
+] as const;
+
+export default memo(function PocRequestResponse({
   pocDoc,
   currentIndex,
-  pocList,
+  pocListLength,
   selectedPoc,
   setSelectedPoc,
   onPositionChange,
   onTextChange,
+  onValueChange,
   onRemovePoc,
   onSetCodeSelection,
 }: PocRequestResponseProps) {
@@ -44,7 +51,7 @@ export default function PocRequestResponse({
       {...{
         pocDoc,
         currentIndex,
-        pocList,
+        pocListLength,
         icon: mdiCableData,
         onPositionChange,
         onRemovePoc,
@@ -69,44 +76,25 @@ export default function PocRequestResponse({
       />
 
       <Grid className="grid-cols-1 gap-4 2xl:grid-cols-2">
-        <Grid>
-          <Label text="Request" />
-          <PocCodeEditor
-            pocDoc={pocDoc}
-            disableViewHighlights={(pocDoc?.request_highlights ?? []).length <= 0}
-            currentIndex={currentIndex}
-            highlightsProperty="request_highlights"
-            code={pocDoc.request}
-            selectedLanguage="http"
-            ideStartingLineNumber={1}
-            textHighlights={pocDoc.request_highlights}
-            lineWrapId="request"
-            onChange={code =>
-              onTextChange<PocRequestResponseDoc>(currentIndex, "request")({ target: { value: code } } as any)
-            }
-            onSetCodeSelection={onSetCodeSelection}
-          />
-        </Grid>
-
-        <Grid>
-          <Label text="Response" />
-          <PocCodeEditor
-            pocDoc={pocDoc}
-            disableViewHighlights={(pocDoc?.response_highlights ?? []).length <= 0}
-            currentIndex={currentIndex}
-            highlightsProperty="response_highlights"
-            code={pocDoc.response}
-            selectedLanguage="http"
-            ideStartingLineNumber={1}
-            textHighlights={pocDoc.response_highlights}
-            lineWrapId="response"
-            onChange={code =>
-              onTextChange<PocRequestResponseDoc>(currentIndex, "response")({ target: { value: code } } as any)
-            }
-            onSetCodeSelection={onSetCodeSelection}
-          />
-        </Grid>
+        {variants.map(({ label, property, highlightsProperty }) => (
+          <Grid key={property}>
+            <Label text={label} />
+            <PocCodeEditor
+              pocDoc={pocDoc}
+              disableViewHighlights={(pocDoc[highlightsProperty] ?? []).length <= 0}
+              currentIndex={currentIndex}
+              highlightsProperty={highlightsProperty}
+              code={pocDoc[property]}
+              selectedLanguage="http"
+              ideStartingLineNumber={1}
+              textHighlights={pocDoc[highlightsProperty]}
+              lineWrapId={property}
+              onChange={code => onValueChange<PocRequestResponseDoc>(currentIndex, property, code)}
+              onSetCodeSelection={onSetCodeSelection}
+            />
+          </Grid>
+        ))}
       </Grid>
     </PocTemplate>
   );
-}
+});

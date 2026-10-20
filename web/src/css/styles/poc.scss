@@ -55,3 +55,8 @@
   border: none;
   background-image: linear-gradient(to bottom, var(--bg-primary), rgba(var(--bg-secondary-rgb), 0.5));
 }
+
+.text-no-overflow {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}

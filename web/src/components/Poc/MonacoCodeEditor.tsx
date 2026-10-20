@@ -1,77 +1,76 @@
 import Editor, { Monaco, OnMount } from "@monaco-editor/react";
 import type * as monaco from "monaco-editor";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Grid from "../Composition/Grid";
-import Label from "../Form/Label";
+import { SelectOption } from "../Form/SelectWrapper.types";
 import { MonacoTextSelection } from "./MonacoCodeEditor.types";
 
-interface MonacoCodeEditorProps {
-  language?: string;
-  label?: string;
-  value?: string;
-  theme?: string;
-  ideStartingLineNumber?: number;
-  height?: string;
-  stopLineNumberAt?: number;
-  textHighlights?: MonacoTextSelection[];
-  removeDisappearedHighlights?: (indexes: number[]) => void;
-  options?: monaco.editor.IStandaloneEditorConstructionOptions;
-  onChange?: (value: string) => void;
-  onLanguageOptionsInit?;
-  onTextSelection?;
-  color?: string;
+const NO_HIGHLIGHTS: MonacoTextSelection[] = [];
+
+function getContrastTextColor(hexColor: string): string {
+  const hex = hexColor.replace("#", "");
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
+
+  const [R, G, B] = [r, g, b].map(c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+
+  return luminance > 0.179 ? "#000000" : "#ffffff";
 }
 
-export default function MonacoCodeEditor({
-  language,
-  label = "",
-  value,
-  theme = "vs-dark",
-  ideStartingLineNumber = 1,
-  height = "100%",
-  stopLineNumberAt,
-  textHighlights = [],
-  removeDisappearedHighlights = () => {},
-  options,
-  onChange = () => {},
-  onLanguageOptionsInit = () => {},
-  onTextSelection = (x: MonacoTextSelection) => {},
-}: MonacoCodeEditorProps) {
-  const [editor, setEditor] = useState<monaco.editor.IStandaloneCodeEditor>();
-  const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
-  const monacoRef = useRef<typeof monaco | null>(null);
+const injectedHighlightClasses = new Set<string>();
 
-  function getContrastTextColor(hexColor: string): string {
-    const hex = hexColor.replace("#", "");
-    const r = parseInt(hex.slice(0, 2), 16) / 255;
-    const g = parseInt(hex.slice(2, 4), 16) / 255;
-    const b = parseInt(hex.slice(4, 6), 16) / 255;
+function getOrCreateHighlightClass(hexValue: string): string {
+  const hexValueClean = hexValue.replace("#", "");
+  const className = `monaco-editor-highlight-${hexValueClean}`;
 
-    const [R, G, B] = [r, g, b].map(c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
-    const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  if (!injectedHighlightClasses.has(className)) {
+    injectedHighlightClasses.add(className);
 
-    return luminance > 0.179 ? "#000000" : "#ffffff";
-  }
+    const textColor = getContrastTextColor(hexValue);
 
-  function getOrCreateHighlightClass(hexValue: string): string {
-    const hexValueClean = hexValue.replace("#", "");
-    const className = `monaco-editor-highlight-${hexValueClean}`;
-
-    if (!document.querySelector(`.${className}`)) {
-      const textColor = getContrastTextColor(hexValue);
-
-      const style = document.createElement("style");
-      style.innerHTML = `
+    const style = document.createElement("style");
+    style.innerHTML = `
       .${className} {
         background-color: ${hexValue};
         color: ${textColor};
       }
     `;
-      document.head.appendChild(style);
-    }
-
-    return className;
+    document.head.appendChild(style);
   }
+
+  return className;
+}
+
+interface MonacoCodeEditorProps {
+  language?: string;
+  value?: string;
+  ideStartingLineNumber?: number;
+  stopLineNumberAt?: number;
+  textHighlights?: MonacoTextSelection[];
+  removeDisappearedHighlights?: (indexes: number[]) => void;
+  options?: monaco.editor.IStandaloneEditorConstructionOptions;
+  onChange?: (value: string) => void;
+  onLanguageOptionsInit?: (options: SelectOption[]) => void;
+  onTextSelection?: (selections: MonacoTextSelection[]) => void;
+}
+
+export default function MonacoCodeEditor({
+  language,
+  value,
+  ideStartingLineNumber = 1,
+  stopLineNumberAt,
+  textHighlights = NO_HIGHLIGHTS,
+  removeDisappearedHighlights = () => {},
+  options,
+  onChange = () => {},
+  onLanguageOptionsInit = () => {},
+  onTextSelection = () => {},
+}: MonacoCodeEditorProps) {
+  const [editor, setEditor] = useState<monaco.editor.IStandaloneCodeEditor>();
+  const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const monacoRef = useRef<typeof monaco | null>(null);
 
   const highlightCode = () => {
     if (!editor) {
@@ -129,15 +128,21 @@ export default function MonacoCodeEditor({
     highlightCode();
   }, [textHighlights, editor]);
 
+  // Keep the latest closure available to the debounced check without retriggering the timer.
+  const checkDisappearedHighlightsRef = useRef(checkDisappearedHighlights);
+  checkDisappearedHighlightsRef.current = checkDisappearedHighlights;
+
   useEffect(() => {
     if (!editor) {
       return;
     }
 
-    const defuseDisapparedHighlights = setTimeout(checkDisappearedHighlights, 500);
+    const defuseDisapparedHighlights = setTimeout(() => checkDisappearedHighlightsRef.current(), 500);
     return () => {
       clearTimeout(defuseDisapparedHighlights);
     };
+    // Only value edits arm the check: it deletes non-matching highlights, so it must not run on editor mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   const handleBeforeMount = (monaco: Monaco) => {
@@ -188,21 +193,6 @@ export default function MonacoCodeEditor({
 
           // Multipart boundaries (e.g. --boundary12345)
           [/^--[\w-]+$/, "delimiter"],
-
-          // HTTP status line (response)
-          [/^(HTTP\/\d\.\d)\s+(\d{3})\s+([^\r\n]+)/, ["keyword", "number", "string"]],
-
-          // HTTP request line (already have methods, but matching full line)
-          [/^(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+\S+\s+HTTP\/\d\.\d/, "keyword"],
-
-          // Strings
-          [/"[^"]*"/, "string"],
-
-          // Numbers
-          [/\b\d+(\.\d+)?\b/, "number"],
-
-          // Booleans and null
-          [/\b(true|false|null)\b/, "keyword"],
 
           // Comments
           [/^#.*$/, "comment"],
@@ -260,37 +250,41 @@ export default function MonacoCodeEditor({
     });
   };
 
+  const editorOptions = useMemo<monaco.editor.IStandaloneEditorConstructionOptions>(
+    () => ({
+      lineNumbers: i => (i >= stopLineNumberAt ? "" : `${i - 1 + ideStartingLineNumber}`),
+      lineNumbersMinChars: 2,
+      glyphMargin: false,
+      scrollBeyondLastLine: false,
+      selectOnLineNumbers: true,
+      roundedSelection: true,
+      readOnly: false,
+      cursorStyle: "line",
+      automaticLayout: true,
+      wordWrap: "on",
+      formatOnType: true,
+      formatOnPaste: true,
+      scrollbar: { alwaysConsumeMouseWheel: false },
+      minimap: { enabled: true, renderCharacters: true },
+      tabSize: 2,
+      "semanticHighlighting.enabled": false,
+      ...options,
+    }),
+    [options, stopLineNumberAt, ideStartingLineNumber]
+  );
+
   return (
     <Grid>
-      {label && <Label text={label} />}
       <div className="h-full min-h-[400px] w-full min-w-0 resize-y overflow-auto border border-[color:--border-primary]">
         <Editor
-          height={height}
+          height="100%"
           language={language}
           value={value}
-          theme={theme}
+          theme="vs-dark"
           onChange={val => onChange(val || "")}
           beforeMount={handleBeforeMount}
           onMount={handleEditorMount}
-          options={{
-            lineNumbers: i => (i >= stopLineNumberAt ? "" : `${i - 1 + ideStartingLineNumber}`),
-            lineNumbersMinChars: 2,
-            glyphMargin: false,
-            scrollBeyondLastLine: false,
-            selectOnLineNumbers: true,
-            roundedSelection: true,
-            readOnly: false,
-            cursorStyle: "line",
-            automaticLayout: true,
-            wordWrap: "on",
-            formatOnType: true,
-            formatOnPaste: true,
-            scrollbar: { alwaysConsumeMouseWheel: false },
-            minimap: { enabled: true, renderCharacters: true },
-            tabSize: 2,
-            "semanticHighlighting.enabled": false,
-            ...options,
-          }}
+          options={editorOptions}
         />
       </div>
     </Grid>

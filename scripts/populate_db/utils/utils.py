@@ -172,14 +172,17 @@ def rand_protocol() -> str:
     return random.choice(protocols)
 
 
-def rand_target_name() -> str:
-    names = [
+def rand_target_tag() -> str:
+    tags = [
         "Android",
         "iOS",
         "Backend",
         "Api",
+        "nessus",
+        "burp",
+        "",
     ]
-    return random.choice(names)
+    return random.choice(tags)
 
 
 def rand_name(n=1) -> str:
@@ -356,7 +359,7 @@ def rand_vulnerability_description() -> str:
 def rand_vulnerability_status() -> str:
     statuses = [
         "Open",
-        "In Progress",
+        "Partially fixed",
         "Closed",
     ]
     return random.choice(statuses)

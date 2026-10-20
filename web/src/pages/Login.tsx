@@ -14,6 +14,7 @@ import { User } from "../types/common.types";
 import { getPageTitle } from "../utils/helpers";
 // @ts-ignore
 import logo from "../assets/logo_stroke.svg";
+import PasswordPolicies from "../components/Form/PasswordPolicies";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -133,14 +134,17 @@ export default function Login() {
                 <br />
                 Please enter a new password to reset it.
               </p>
-              <Input
-                type="password"
-                id="password"
-                label="New Password"
-                onChange={e => setPassword(e.target.value)}
-                value={password}
-                autoFocus
-              />
+              <div>
+                <Input
+                  type="password"
+                  id="password"
+                  label="New Password"
+                  onChange={e => setPassword(e.target.value)}
+                  value={password}
+                  autoFocus
+                />
+                <PasswordPolicies />
+              </div>
               <Input
                 type="password"
                 id="confirm_password"

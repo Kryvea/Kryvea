@@ -38,7 +38,7 @@ import {
 } from "@mdi/js";
 import Color from "@tiptap/extension-color";
 import { Highlight } from "@tiptap/extension-highlight";
-import Image from '@tiptap/extension-image';
+import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Table } from "@tiptap/extension-table";
 import TableCell from "@tiptap/extension-table-cell";
@@ -46,17 +46,16 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
-import { Editor, EditorContent, useEditor } from "@tiptap/react";
+import { Editor, EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import ImageResize from "tiptap-extension-resize-image";
 import Card from "../Composition/Card";
-import Grid from "../Composition/Grid";
 import Modal from "../Composition/Modal";
 import Button from "../Form/Button";
 import ColorPicker from "../Form/ColorPicker";
 import Input from "../Form/Input";
-import UploadFile from "../Form/UploadFile";
+import { ImageUploadField, useImageUpload } from "../Form/ImageUpload";
 
 const extensions = [
   StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
@@ -73,6 +72,8 @@ const extensions = [
   TextAlign.configure({ types: ["heading", "paragraph"] }),
 ];
 
+const headingLevels = [1, 2, 3, 4, 5, 6] as const;
+
 const headingIcons = {
   1: mdiFormatHeader1,
   2: mdiFormatHeader2,
@@ -82,74 +83,83 @@ const headingIcons = {
   6: mdiFormatHeader6,
 };
 
+const alignments = [
+  { value: "left", icon: mdiFormatAlignLeft },
+  { value: "center", icon: mdiFormatAlignCenter },
+  { value: "right", icon: mdiFormatAlignRight },
+  { value: "justify", icon: mdiFormatAlignJustify },
+] as const;
+
 function MenuBar({ editor }: { editor: Editor | null }) {
-  const [, setState] = useState(0);
   const [showModal, setShowModal] = useState<false | "link" | "image">(false);
   const [inputValue, setInputValue] = useState("");
-
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const [filename, setFilename] = useState<string>("");
-  const [imageUrl, setImageUrl] = useState<string>("");
   const imageInputId = useId();
 
-  useEffect(() => {
-    if (!editor) return;
+  const imageUpload = useImageUpload({
+    onSelect: (_file, objectUrl) => setInputValue(objectUrl),
+    onClear: () => setInputValue(""),
+  });
 
-    const callback = () => setState(v => v + 1);
-    editor.on("transaction", callback);
+  // Recomputed per transaction, but only triggers a re-render when the selected snapshot changes.
+  const editorState = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      if (!editor) {
+        return null;
+      }
 
-    return () => {
-      editor.off("transaction", callback);
-    };
-  }, [editor]);
+      const paraAlign = editor.getAttributes("paragraph")?.textAlign;
+      const headingAlign = editor.getAttributes("heading")?.textAlign;
 
-  if (!editor) return null;
+      return {
+        isBold: editor.isActive("bold"),
+        canBold: editor.can().chain().focus().toggleBold().run(),
+        isItalic: editor.isActive("italic"),
+        canItalic: editor.can().chain().focus().toggleItalic().run(),
+        isUnderline: editor.isActive("underline"),
+        canUnderline: editor.can().chain().focus().toggleUnderline().run(),
+        isStrike: editor.isActive("strike"),
+        canStrike: editor.can().chain().focus().toggleStrike().run(),
+        isCode: editor.isActive("code"),
+        canCode: editor.can().chain().focus().toggleCode().run(),
+        isCodeBlock: editor.isActive("codeBlock"),
+        canCodeBlock: editor.can().chain().focus().toggleCodeBlock().run(),
+        headings: headingLevels.map(level => ({
+          isActive: editor.isActive("heading", { level }),
+          canToggle: editor.can().chain().focus().toggleHeading({ level }).run(),
+        })),
+        isParagraph: editor.isActive("paragraph"),
+        textAlign: paraAlign ?? headingAlign ?? "left",
+        canSetTextAlign: editor.can().chain().focus().setTextAlign("left").run(),
+        isBulletList: editor.isActive("bulletList"),
+        canBulletList: editor.can().chain().focus().toggleBulletList().run(),
+        isOrderedList: editor.isActive("orderedList"),
+        canOrderedList: editor.can().chain().focus().toggleOrderedList().run(),
+        isBlockquote: editor.isActive("blockquote"),
+        canBlockquote: editor.can().chain().focus().toggleBlockquote().run(),
+        isLink: editor.isActive("link"),
+        canSetImage: editor.can().chain().focus().setImage({ src: "https://" }).run(),
+        textColor: editor.getAttributes("textStyle")?.color || "#000000",
+        highlightColor: editor.getAttributes("highlight")?.color || "#FFFF00",
+        canUndo: editor.can().undo(),
+        canRedo: editor.can().redo(),
+      };
+    },
+  });
 
-  const is = (name: string, attrs?: any) => editor.isActive(name, attrs);
-  const can = (command: () => boolean) => command();
-  const isAlign = (value: "left" | "center" | "right" | "justify") => {
-    const paraAlign = editor.getAttributes("paragraph")?.textAlign;
-    const headingAlign = editor.getAttributes("heading")?.textAlign;
-    return (paraAlign ?? headingAlign ?? "left") === value;
-  };
+  if (!editor || !editorState) return null;
 
   const handleModalConfirm = () => {
     if (showModal === "link") {
       editor.chain().focus().setLink({ href: inputValue }).run();
+      imageUpload.clearImage();
     } else if (showModal === "image") {
       editor.chain().focus().setImage({ src: inputValue }).run();
+      // The editor now owns the inserted object URL: release, don't revoke.
+      imageUpload.releaseImage();
     }
     setShowModal(false);
-    setInputValue("");
-    clearImage();
   };
-
-  const onImageChangeWrapper = ({ target: { files } }) => {
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    if (file.type !== "image/png" && file.type !== "image/jpeg") return;
-
-    const objectUrl = URL.createObjectURL(file);
-    setFilename(file.name);
-    setImageUrl(objectUrl);
-    setInputValue(objectUrl);
-  };
-
-  const clearImage = () => {
-    imageInputRef.current.value = "";
-    setFilename("");
-    setImageUrl("");
-    setInputValue("");
-  };
-
-  useEffect(() => {
-    return () => {
-      if (imageUrl) {
-        URL.revokeObjectURL(imageUrl);
-      }
-    };
-  }, []);
 
   return (
     <>
@@ -157,29 +167,16 @@ function MenuBar({ editor }: { editor: Editor | null }) {
         <Modal
           title={showModal === "link" ? "Insert Link" : "Insert Image"}
           onConfirm={handleModalConfirm}
-          onCancel={() => setShowModal(false)}
+          onCancel={() => {
+            imageUpload.clearImage();
+            setShowModal(false);
+          }}
         >
           {showModal === "link" && (
             <Input type="text" label="URL" value={inputValue} onChange={e => setInputValue(e.target.value)} autoFocus />
           )}
 
-          {showModal === "image" && (
-            <Grid>
-              <UploadFile
-                label="Choose Image"
-                inputId={imageInputId}
-                filename={filename}
-                inputRef={imageInputRef}
-                name="imagePoc"
-                accept="image/png, image/jpeg"
-                onChange={onImageChangeWrapper}
-                onButtonClick={clearImage}
-              />
-              {imageUrl && (
-                <img src={imageUrl} alt="Selected image preview" className="max-h-[550px] w-fit object-contain" />
-              )}
-            </Grid>
-          )}
+          {showModal === "image" && <ImageUploadField inputId={imageInputId} upload={imageUpload} />}
         </Modal>
       )}
 
@@ -187,53 +184,53 @@ function MenuBar({ editor }: { editor: Editor | null }) {
         {/** Formatting */}
         <Button
           onClick={() => editor.chain().focus().toggleBold().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleBold().run())}
-          className={is("bold") ? "" : "secondary"}
+          disabled={!editorState.canBold}
+          className={editorState.isBold ? "" : "secondary"}
           icon={mdiFormatBold}
           title="Bold"
         />
         <Button
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleItalic().run())}
-          className={is("italic") ? "" : "secondary"}
+          disabled={!editorState.canItalic}
+          className={editorState.isItalic ? "" : "secondary"}
           icon={mdiFormatItalic}
           title="Italic"
         />
         <Button
           onClick={() => editor.chain().focus().toggleUnderline().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleUnderline().run())}
-          className={is("underline") ? "" : "secondary"}
+          disabled={!editorState.canUnderline}
+          className={editorState.isUnderline ? "" : "secondary"}
           icon={mdiFormatUnderline}
           title="Underline"
         />
         <Button
           onClick={() => editor.chain().focus().toggleStrike().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleStrike().run())}
-          className={is("strike") ? "" : "secondary"}
+          disabled={!editorState.canStrike}
+          className={editorState.isStrike ? "" : "secondary"}
           icon={mdiFormatStrikethrough}
           title="Strikethrough"
         />
         <Button
           onClick={() => editor.chain().focus().toggleCode().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleCode().run())}
-          className={is("code") ? "" : "secondary"}
+          disabled={!editorState.canCode}
+          className={editorState.isCode ? "" : "secondary"}
           icon={mdiCodeBraces}
           title="Code"
         />
         <Button
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleCodeBlock().run())}
-          className={is("codeBlock") ? "" : "secondary"}
+          disabled={!editorState.canCodeBlock}
+          className={editorState.isCodeBlock ? "" : "secondary"}
           icon={mdiCodeTags}
           title="Code Block"
         />
 
-        {([1, 2, 3, 4, 5, 6] as const).map(level => (
+        {headingLevels.map((level, i) => (
           <Button
             key={level}
             onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
-            disabled={!can(() => editor.can().chain().focus().toggleHeading({ level }).run())}
-            className={is("heading", { level }) ? "" : "secondary"}
+            disabled={!editorState.headings[i].canToggle}
+            className={editorState.headings[i].isActive ? "" : "secondary"}
             icon={headingIcons[level]}
             title={`Heading ${level}`}
           />
@@ -241,26 +238,19 @@ function MenuBar({ editor }: { editor: Editor | null }) {
 
         <Button
           onClick={() => editor.chain().focus().setParagraph().run()}
-          className={is("paragraph") ? "" : "secondary"}
+          className={editorState.isParagraph ? "" : "secondary"}
           icon={mdiFormatParagraph}
           title="Paragraph"
         />
 
         {/** Alignment */}
-        {["left", "center", "right", "justify"].map(value => (
+        {alignments.map(({ value, icon }) => (
           <Button
             key={value}
             onClick={() => editor.chain().focus().setTextAlign(value).run()}
-            disabled={!can(() => editor.can().chain().focus().setTextAlign(value).run())}
-            className={isAlign(value as any) ? "" : "secondary"}
-            icon={
-              {
-                left: mdiFormatAlignLeft,
-                center: mdiFormatAlignCenter,
-                right: mdiFormatAlignRight,
-                justify: mdiFormatAlignJustify,
-              }[value]
-            }
+            disabled={!editorState.canSetTextAlign}
+            className={editorState.textAlign === value ? "" : "secondary"}
+            icon={icon}
             title={`Align ${value.charAt(0).toUpperCase() + value.slice(1)}`}
           />
         ))}
@@ -268,28 +258,28 @@ function MenuBar({ editor }: { editor: Editor | null }) {
         {/** Lists */}
         <Button
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleBulletList().run())}
-          className={is("bulletList") ? "" : "secondary"}
+          disabled={!editorState.canBulletList}
+          className={editorState.isBulletList ? "" : "secondary"}
           icon={mdiFormatListBulleted}
           title="Bullet List"
         />
         <Button
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleOrderedList().run())}
-          className={is("orderedList") ? "" : "secondary"}
+          disabled={!editorState.canOrderedList}
+          className={editorState.isOrderedList ? "" : "secondary"}
           icon={mdiFormatListNumbered}
           title="Ordered List"
         />
 
         <Button
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          disabled={!can(() => editor.can().chain().focus().toggleBlockquote().run())}
-          className={is("blockquote") ? "" : "secondary"}
+          disabled={!editorState.canBlockquote}
+          className={editorState.isBlockquote ? "" : "secondary"}
           icon={mdiFormatQuoteClose}
           title="Blockquote"
         />
 
-        {!is("link") ? (
+        {!editorState.isLink ? (
           <Button
             icon={mdiLink}
             title="Add Link"
@@ -303,13 +293,10 @@ function MenuBar({ editor }: { editor: Editor | null }) {
         )}
 
         <Button
-          disabled={!can(() => editor.can().chain().focus().setImage({ src: "https://" }).run())}
+          disabled={!editorState.canSetImage}
           icon={mdiImage}
           title="Insert Image"
-          onClick={() => {
-            setShowModal("image");
-            imageInputRef.current?.click();
-          }}
+          onClick={() => setShowModal("image")}
         />
 
         {/** Table */}
@@ -344,26 +331,26 @@ function MenuBar({ editor }: { editor: Editor | null }) {
         <ColorPicker
           icon={mdiFormatColorText}
           title="Text Color"
-          value={editor.getAttributes("textStyle")?.color || "#000000"}
+          value={editorState.textColor}
           onChange={color => editor.chain().focus().setColor(color).run()}
         />
 
         <ColorPicker
           icon={mdiFormatColorHighlight}
           title="Highlight"
-          value={editor.getAttributes("highlight")?.color || "#FFFF00"}
+          value={editorState.highlightColor}
           onChange={color => editor.chain().focus().setHighlight({ color }).run()}
         />
 
         <Button
           onClick={() => editor.chain().focus().undo().run()}
-          disabled={!can(() => editor.can().undo())}
+          disabled={!editorState.canUndo}
           icon={mdiUndo}
           title="Undo"
         />
         <Button
           onClick={() => editor.chain().focus().redo().run()}
-          disabled={!can(() => editor.can().redo())}
+          disabled={!editorState.canRedo}
           icon={mdiRedo}
           title="Redo"
         />
@@ -372,8 +359,23 @@ function MenuBar({ editor }: { editor: Editor | null }) {
   );
 }
 
-export default function RichTextEditor() {
-  const editor = useEditor({ extensions });
+type RichTextEditorProps = {
+  /** Initial HTML content; the editor owns the document after mount. */
+  content?: string;
+  /** Called with the editor HTML on every document update. */
+  onChange?: (html: string) => void;
+};
+
+export default function RichTextEditor({ content = "", onChange }: RichTextEditorProps) {
+  // Keep the latest callback available to onUpdate without recreating the editor.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const editor = useEditor({
+    extensions,
+    content,
+    onUpdate: ({ editor }) => onChangeRef.current?.(editor.getHTML()),
+  });
 
   return (
     <Card className="RichText">

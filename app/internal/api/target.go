@@ -4,270 +4,172 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Kryvea/Kryvea/internal/mongo"
+	"github.com/Kryvea/Kryvea/internal/model"
+	"github.com/Kryvea/Kryvea/internal/store"
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
-type targetRequestData struct {
-	IPv4         string `json:"ipv4"`
-	IPv6         string `json:"ipv6"`
-	Port         int    `json:"port"`
-	Protocol     string `json:"protocol"`
-	FQDN         string `json:"fqdn"`
-	Tag          string `json:"tag"`
-	CustomerID   string `json:"customer_id"`
-	AssessmentID string `json:"assessment_id"`
+type targetUpsertItem struct {
+	ID       string `json:"id"`
+	IPv4     string `json:"ipv4"`
+	IPv6     string `json:"ipv6"`
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"`
+	FQDN     string `json:"fqdn"`
+	Tag      string `json:"tag"`
 }
 
-func (d *Driver) AddTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+type targetBulkRequest struct {
+	CustomerID   string             `json:"customer_id"`
+	AssessmentID string             `json:"assessment_id"`
+	Upsert       []targetUpsertItem `json:"upsert"`
+	Delete       []string           `json:"delete"`
+}
 
-	// parse request body
-	data := &targetRequestData{}
+func (d *Driver) BulkTargets(c *fiber.Ctx) error {
+	user := c.Locals("user").(*model.User)
+
+	data := &targetBulkRequest{}
 	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Cannot parse JSON")
 	}
 
-	// validate data
-	errStr := d.validateTargetData(data)
+	customer, errStr := d.customerFromParam(c.UserContext(), data.CustomerID)
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
-
-	// check if user has access to customer
-	customer, errStr := d.customerFromParam(data.CustomerID)
-	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
-	}
-
 	if !user.CanAccessCustomer(customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
-	assessment := &mongo.Assessment{
-		Model: mongo.Model{
-			ID: uuid.Nil,
-		},
-	}
 	// if assessment is not empty retrieve it from database
+	assessment := &model.Assessment{Model: model.Model{ID: uuid.Nil}}
 	if data.AssessmentID != "" {
-		assessment, errStr = d.assessmentFromParam(data.AssessmentID)
+		assessment, errStr = d.assessmentFromParam(c.UserContext(), data.AssessmentID)
 		if errStr != "" {
-			c.Status(fiber.StatusBadRequest)
-			return c.JSON(fiber.Map{
-				"error": errStr,
-			})
+			return jsonError(c, fiber.StatusBadRequest, errStr)
+		}
+
+		if assessment.Customer.ID != customer.ID {
+			return jsonError(c, fiber.StatusForbidden, "Forbidden")
 		}
 	}
 
-	target := &mongo.Target{
-		IPv4:     data.IPv4,
-		IPv6:     data.IPv6,
-		Port:     data.Port,
-		Protocol: data.Protocol,
-		FQDN:     data.FQDN,
-		Tag:      data.Tag,
+	for i := range data.Upsert {
+		if errStr := d.validateTargetItem(&data.Upsert[i]); errStr != "" {
+			return jsonError(c, fiber.StatusBadRequest, errStr)
+		}
 	}
 
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	targetID, err := session.WithTransaction(func(ctx context.Context) (any, error) {
-		// insert target into database
-		targetID, err := d.mongo.Target().Insert(ctx, target, customer.ID)
+	deleteIDs := make([]uuid.UUID, 0, len(data.Delete))
+	for _, raw := range data.Delete {
+		id, err := util.ParseUUID(raw)
 		if err != nil {
-			c.Status(fiber.StatusBadRequest)
-
-			if mongo.IsDuplicateKeyError(err) {
-				return uuid.Nil, errors.New("Target with provided data already exists")
-			}
-
-			return uuid.Nil, errors.New("Cannot create target")
+			return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
 		}
+		deleteIDs = append(deleteIDs, id)
+	}
 
-		// add target to assessment if provided
-		if assessment.ID != uuid.Nil {
-			err = d.mongo.Assessment().UpdateTargets(ctx, assessment.ID, target.ID)
-			if err != nil {
-				return uuid.Nil, errors.New("Cannot add target to assessment")
+	updateIDs := make([]uuid.UUID, 0, len(data.Upsert))
+	for _, item := range data.Upsert {
+		if item.ID == "" {
+			continue
+		}
+		id, err := util.ParseUUID(item.ID)
+		if err != nil {
+			return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
+		}
+		updateIDs = append(updateIDs, id)
+	}
+
+	referencedIDs := append(append(make([]uuid.UUID, 0, len(deleteIDs)+len(updateIDs)), deleteIDs...), updateIDs...)
+	if len(referencedIDs) > 0 {
+		found, err := d.db.Target().ExistingIDsForCustomer(c.UserContext(), referencedIDs, customer.ID)
+		if err != nil {
+			return jsonError(c, fiber.StatusInternalServerError, "Cannot validate targets")
+		}
+		allowed := make(map[uuid.UUID]struct{}, len(found))
+		for _, id := range found {
+			allowed[id] = struct{}{}
+		}
+		for _, id := range referencedIDs {
+			if _, ok := allowed[id]; !ok {
+				return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
 			}
 		}
+	}
 
-		return targetID, nil
+	insertedIDs, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
+		var inserted []uuid.UUID
+		for _, id := range deleteIDs {
+			if err := d.db.Target().Delete(ctx, id); err != nil {
+				return nil, errors.New("Cannot delete target")
+			}
+		}
+		for _, item := range data.Upsert {
+			t := &model.Target{
+				IPv4:     item.IPv4,
+				IPv6:     item.IPv6,
+				Port:     item.Port,
+				Protocol: item.Protocol,
+				FQDN:     item.FQDN,
+				Tag:      item.Tag,
+			}
+			if item.ID == "" {
+				id, err := d.db.Target().Insert(ctx, t, customer.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrDuplicateKey) {
+						return nil, errors.New("Target with provided data already exists")
+					}
+					return nil, errors.New("Cannot create target")
+				}
+				inserted = append(inserted, id)
+				continue
+			}
+			id, _ := util.ParseUUID(item.ID)
+			if err := d.db.Target().Update(ctx, id, t); err != nil {
+				if errors.Is(err, store.ErrDuplicateKey) {
+					return nil, errors.New("Target with provided data already exists")
+				}
+				return nil, errors.New("Cannot update target")
+			}
+		}
+		// add targets to assessment if provided
+		if assessment.ID != uuid.Nil && len(inserted) > 0 {
+			if err := d.db.Assessment().BulkUpdateTargets(ctx, assessment.ID, inserted); err != nil {
+				return nil, errors.New("Cannot attach targets to assessment")
+			}
+		}
+		return inserted, nil
 	})
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
-	}
-
-	c.Status(fiber.StatusCreated)
-	return c.JSON(fiber.Map{
-		"message":   "Target created",
-		"target_id": targetID.(uuid.UUID),
-	})
-}
-
-func (d *Driver) UpdateTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
-
-	// parse target param
-	target, errStr := d.targetFromParam(c.Params("target"))
-	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
-	}
-
-	// check if user has access to customer
-	if !user.CanAccessCustomer(target.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
-	}
-
-	// parse request body
-	data := &targetRequestData{}
-	if err := c.BodyParser(data); err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Cannot parse JSON",
-		})
-	}
-
-	// validate data
-	errStr = d.validateTargetData(data)
-	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
-	}
-
-	newTarget := &mongo.Target{
-		IPv4:     data.IPv4,
-		IPv6:     data.IPv6,
-		Port:     data.Port,
-		Protocol: data.Protocol,
-		FQDN:     data.FQDN,
-		Tag:      data.Tag,
-	}
-
-	// update target in database
-	err := d.mongo.Target().Update(context.Background(), target.ID, newTarget)
-	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-
-		if mongo.IsDuplicateKeyError(err) {
-			return c.JSON(fiber.Map{
-				"error": "Target with provided data already exists",
-			})
-		}
-
-		return c.JSON(fiber.Map{
-			"error": "Cannot update target",
-		})
+		return jsonError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	c.Status(fiber.StatusOK)
 	return c.JSON(fiber.Map{
-		"message": "Target updated",
-	})
-}
-
-func (d *Driver) DeleteTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
-
-	// parse target param
-	target, errStr := d.targetFromParam(c.Params("target"))
-	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
-	}
-
-	// check if user has access to customer
-	if !user.CanAccessCustomer(target.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
-	}
-
-	session, err := d.mongo.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.End()
-
-	_, err = session.WithTransaction(func(ctx context.Context) (any, error) {
-		// delete target from database
-		err := d.mongo.Target().Delete(ctx, target.ID)
-		if err != nil {
-			return nil, errors.New("Cannot delete target")
-		}
-
-		return nil, nil
-	})
-	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": err.Error(),
-		})
-	}
-
-	c.Status(fiber.StatusOK)
-	return c.JSON(fiber.Map{
-		"message": "Target deleted",
+		"message":      "Targets updated",
+		"inserted_ids": insertedIDs,
 	})
 }
 
 func (d *Driver) GetTargetsByCustomer(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// check if user has access to customer
-	customer, errStr := d.customerFromParam(c.Params("customer"))
+	customer, errStr := d.customerFromParam(c.UserContext(), c.Params("customer"))
 	if errStr != "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": errStr,
-		})
+		return jsonError(c, fiber.StatusBadRequest, errStr)
 	}
 
 	if !user.CanAccessCustomer(customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
-	targets, err := d.mongo.Target().Search(context.Background(), customer.ID, c.Query("search"))
+	targets, err := d.db.Target().Search(c.UserContext(), customer.ID, c.Query("search"))
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get targets",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get targets")
 	}
 
 	c.Status(fiber.StatusOK)
@@ -275,75 +177,47 @@ func (d *Driver) GetTargetsByCustomer(c *fiber.Ctx) error {
 }
 
 func (d *Driver) GetTarget(c *fiber.Ctx) error {
-	user := c.Locals("user").(*mongo.User)
+	user := c.Locals("user").(*model.User)
 
-	// parse target param
 	targetParam := c.Params("target")
 	if targetParam == "" {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Target ID is required",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Target ID is required")
 	}
 
 	targetID, err := util.ParseUUID(targetParam)
 	if err != nil {
-		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error": "Invalid target ID",
-		})
+		return jsonError(c, fiber.StatusBadRequest, "Invalid target ID")
 	}
 
-	// get target by customer and ID from database
-	target, err := d.mongo.Target().GetByIDPipeline(context.Background(), targetID)
+	target, err := d.db.Target().GetByIDWithRelations(c.UserContext(), targetID)
 	if err != nil {
-		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Cannot get target",
-		})
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot get target")
 	}
 
 	if !user.CanAccessCustomer(target.Customer.ID) {
-		c.Status(fiber.StatusForbidden)
-		return c.JSON(fiber.Map{
-			"error": "Forbidden",
-		})
+		return jsonError(c, fiber.StatusForbidden, "Forbidden")
 	}
 
 	c.Status(fiber.StatusOK)
 	return c.JSON(target)
 }
 
-func (d *Driver) targetFromParam(targetParam string) (*mongo.Target, string) {
-	if targetParam == "" {
-		return nil, "Target ID is required"
-	}
-
-	targetID, err := util.ParseUUID(targetParam)
-	if err != nil {
-		return nil, "Invalid target ID"
-	}
-
-	target, err := d.mongo.Target().GetByIDPipeline(context.Background(), targetID)
-	if err != nil {
-		return nil, "Invalid target ID"
-	}
-
-	return target, ""
+func (d *Driver) targetFromParam(ctx context.Context, targetParam string) (*model.Target, string) {
+	return fromParam(ctx, targetParam, "Target", d.db.Target().GetByIDWithRelations)
 }
 
-func (d *Driver) validateTargetData(data *targetRequestData) string {
+func (d *Driver) validateTargetItem(data *targetUpsertItem) string {
 	if data.FQDN == "" && data.IPv4 == "" && data.IPv6 == "" {
 		return "At least one of FQDN/Target name, IPv4 or IPv6 must be provided"
 	}
-
 	if data.IPv4 != "" && !util.IsValidIPv4(data.IPv4) {
 		return "Invalid IPv4 address"
 	}
-
 	if data.IPv6 != "" && !util.IsValidIPv6(data.IPv6) {
 		return "Invalid IPv6 address"
 	}
-
+	if data.Port < 0 || data.Port > 65535 {
+		return "Port must be between 0 and 65535"
+	}
 	return ""
 }

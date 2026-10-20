@@ -1,14 +1,15 @@
+import { ReactNode } from "react";
 import Grid from "./Grid";
 import Subtitle from "./Subtitle";
 
 type DescribedCodeProps = {
   className?: string;
-  subtitle?: string;
+  subtitle?: string | ReactNode;
   text?: string;
   children?: React.ReactNode;
 };
 
-export default function DescribedCode({ className, subtitle, text, children }: DescribedCodeProps) {
+export default function DescribedCode({ className = "", subtitle, text, children }: DescribedCodeProps) {
   return (
     <Grid className={`DescribedCode ${className}`}>
       <Subtitle className="opacity-50" text={subtitle} />
