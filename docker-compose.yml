@@ -53,6 +53,8 @@ services:
             - KRYVEA_LOG_MAX_BACKUPS=5
             - KRYVEA_LOG_MAX_AGE_DAYS=0
             - KRYVEA_LOG_COMPRESS=true
+            - KRYVEA_BODY_LIMIT_MB=1000
+            - KRYVEA_LOCALES_PATH=/etc/kryvea/locales
         volumes:
             - ./.data/log:/var/log/kryvea/
             - ./.data/files:/var/lib/kryvea/files
