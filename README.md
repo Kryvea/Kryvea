@@ -5,8 +5,7 @@
 
   <h1>Kryvea</h1>
 
-  <p><b>The reporting platform you never expected</b><br />
-  Making it simple and easy to manage penetration tests and generate professional reports</p>
+  <p>Making it simple and easy to manage penetration tests and generate professional reports</p>
 
 [![License](https://img.shields.io/badge/License-AGPLv3-blue.svg)](https://github.com/Kryvea/Kryvea/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/Kryvea/Kryvea?include_prereleases)](https://github.com/Kryvea/Kryvea/releases)
@@ -23,23 +22,19 @@
 - **[Configuration](https://kryvea.github.io/configuration)** - Advanced settings
 - **[Troubleshooting](https://kryvea.github.io/troubleshooting)** - Common issues & solutions
 
-## 🌟 Overview
-
-**Kryvea** is a comprehensive reporting platform designed for security professionals to manage penetration testing assessments, track vulnerabilities, and generate professional reports. Built with modern technologies and a modular architecture, Kryvea streamlines the entire security assessment workflow from customer onboarding to final report delivery.
-
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - Docker & Docker Compose installed
-- Port 443 available (or configure custom port)
+- Port 443 available, or change the published port in `docker-compose.yml`
 
 ### Installation
 
 ```bash
 git clone https://github.com/Kryvea/Kryvea.git
 cd Kryvea
-docker compose up
+docker compose up --build -d
 ```
 
 > Access at https://localhost  
