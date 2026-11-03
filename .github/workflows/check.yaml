@@ -1,0 +1,17 @@
+name: Check docker compose build
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate compose file
+        run: docker compose config -q
+
+      - name: Build all images
+        run: docker compose build
