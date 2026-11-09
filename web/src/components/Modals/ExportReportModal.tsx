@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { postDownloadBlob } from "../../api/api";
 import { curryDownloadReport } from "../../api/curries";
+import { showApiError } from "../../api/errors";
 import { GlobalContext } from "../../App";
 import { exportTypes, Template, uuidZero } from "../../types/common.types";
 import Grid from "../Composition/Grid";
@@ -89,13 +90,7 @@ export default function ExportReportModal({
     setShowModal(false);
 
     postDownloadBlob(`/api/assessments/${assessmentId}/export`, payload, curryDownloadReport(toastDownload), err => {
-      toast.update(toastDownload, {
-        render: err.response.data.error,
-        type: "error",
-        isLoading: false,
-        autoClose: 3000,
-        closeButton: true,
-      });
+      showApiError(err.response?.data, toastDownload);
     });
   };
 

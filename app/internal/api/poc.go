@@ -117,9 +117,9 @@ func (d *Driver) UpsertPocs(c *fiber.Ctx) error {
 
 	if len(errs) > 0 {
 		c.Status(fiber.StatusBadRequest)
-		return c.JSON(fiber.Map{
-			"error":  "Failed to process pocs",
-			"errors": errs,
+		return c.JSON(errorResponse{
+			Error:  "Failed to process pocs",
+			Errors: errs,
 		})
 	}
 

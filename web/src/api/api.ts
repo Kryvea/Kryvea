@@ -2,14 +2,12 @@ import axios, { AxiosError, HttpStatusCode } from "axios";
 import { NavigateFunction } from "react-router";
 import { toast } from "react-toastify";
 import { ObjectWithId } from "../types/common.types";
+import { HttpErrorData, showApiError } from "./errors";
 
 type OnThenCallback<T> = (data: T) => any;
 type OnThenCallbackBlob = (data: Blob, contentDisposition: string) => any;
 type OnCatchCallback<T> = (error: T) => any;
 type OnFinallyCallback = () => any;
-type HttpErrorData = {
-  error: string;
-};
 
 let navigateFn;
 
@@ -24,10 +22,7 @@ export const navigate: NavigateFunction = (...rest) => {
   }
 };
 
-const UNKNOWN_HTTP_ERROR_CAUSE = "Unknown error";
-
-//prettier-ignore
-const defaultHandleCatch: OnCatchCallback<AxiosError<HttpErrorData>> = err => toast.error(err.response?.data.error || UNKNOWN_HTTP_ERROR_CAUSE);
+const defaultHandleCatch: OnCatchCallback<AxiosError<HttpErrorData>> = err => showApiError(err.response?.data);
 
 const onCatchClosure = (onCatch: OnCatchCallback<AxiosError<HttpErrorData>>) => (err: AxiosError<HttpErrorData>) => {
   switch (err.response?.status) {

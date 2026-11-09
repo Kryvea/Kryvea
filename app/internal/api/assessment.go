@@ -445,10 +445,10 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 	if err != nil {
 		d.logger.Error().Err(err).Msg("failed to render report")
 		c.Status(fiber.StatusInternalServerError)
-		return c.JSON(fiber.Map{
-			"error": "Failed to generate report",
-			// TODO: remove
-			"err": err.Error(),
+		return c.JSON(errorResponse{
+			Error: "Failed to generate report",
+			// This may leak some internal info
+			Details: err.Error(),
 		})
 	}
 
