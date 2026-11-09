@@ -9,7 +9,7 @@
     "AC:H": "alta",
     "AT:N": "senza requisiti aggiuntivi",
     "AT:P": "con requisiti aggiuntivi",
-    "PR:N": "non autenticato",
+    "PR:N": "senza privilegi",
     "PR:L": "con privilegi limitati",
     "PR:H": "con privilegi elevati",
     "UI:N": "non richiedono l'interazione dell'utente",
