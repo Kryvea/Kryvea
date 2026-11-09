@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "react-toastify";
 import { getData, patchData, postData } from "../api/api";
+import { showApiError } from "../api/errors";
 import { GlobalContext } from "../App";
 import Card from "../components/Composition/Card";
 import Divider from "../components/Composition/Divider";
@@ -189,7 +190,7 @@ export default function AssessmentUpsert() {
           updateSelectedOptions({ action: "all", field: "", value: data });
         },
         err => {
-          toast.error(err.response.data.error);
+          showApiError(err.response?.data);
           navigate(`/customers/${customerId}`);
         }
       );

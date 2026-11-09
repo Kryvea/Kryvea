@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "react-toastify";
 import { deleteData, getData, postData } from "../api/api";
+import { showApiError } from "../api/errors";
 import { GlobalContext } from "../App";
 import Flex from "../components/Composition/Flex";
 import Grid from "../components/Composition/Grid";
@@ -13,8 +14,8 @@ import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import SelectWrapper from "../components/Form/SelectWrapper";
 import UploadFile from "../components/Form/UploadFile";
-import UpsertTargetModal from "../components/Modals/UpsertTargetModal";
 import ExportReportModal from "../components/Modals/ExportReportModal";
+import UpsertTargetModal from "../components/Modals/UpsertTargetModal";
 import { Category, Template, Vulnerability } from "../types/common.types";
 import { formatDate } from "../utils/dates";
 import { formatVulnerabilityTitle, getPageTitle } from "../utils/helpers";
@@ -198,13 +199,7 @@ export default function AssessmentVulnerabilities() {
         setRefreshNonce(n => n + 1);
       },
       err => {
-        toast.update(toastId, {
-          render: err.response.data.error,
-          type: "error",
-          isLoading: false,
-          autoClose: 3000,
-          closeButton: true,
-        });
+        showApiError(err.response?.data, toastId);
         setFileObj(null);
       }
     );

@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router";
 import { toast } from "react-toastify";
 import { deleteData, getData, patchData, postData, putData } from "../api/api";
 import { getKryveaShadow } from "../api/cookie";
+import { showApiError } from "../api/errors";
 import { GlobalContext } from "../App";
 import Card from "../components/Composition/Card";
 import CardTitle from "../components/Composition/CardTitle";
@@ -194,8 +195,7 @@ export default function CustomerDetail() {
         getData<Customer>(`/api/customers/${customerId}`, data => setLogoId(data.logo_id));
         toast.update(toastId, { render: "Logo uploaded", type: "success", isLoading: false, autoClose: 3000 });
       },
-      err =>
-        toast.update(toastId, { render: err.response?.data?.error, type: "error", isLoading: false, autoClose: 3000 })
+      err => showApiError(err.response?.data, toastId)
     );
   };
 

@@ -1,6 +1,5 @@
 import { useContext, useEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { toast } from "react-toastify";
 import { getData, setNavigate } from "../../api/api";
 import { getKryveaShadow } from "../../api/cookie";
 import { GlobalContext } from "../../App";
@@ -25,24 +24,16 @@ export default function RouteWatcher() {
 
   useEffect(() => {
     if (customerId != undefined && ctxCustomer?.id !== customerId) {
-      getData<Customer>(`/api/customers/${customerId}`, setCtxCustomer, () =>
-        toast.error("Could not get customer by id: " + customerId)
-      );
+      getData<Customer>(`/api/customers/${customerId}`, setCtxCustomer);
     }
     if (assessmentId != undefined && ctxAssessment?.id !== assessmentId) {
-      getData<Assessment>(`/api/assessments/${assessmentId}`, setCtxAssessment, () =>
-        toast.error("Could not get assessment by id: " + assessmentId)
-      );
+      getData<Assessment>(`/api/assessments/${assessmentId}`, setCtxAssessment);
     }
     if (vulnerabilityId != undefined && ctxVulnerability?.id !== vulnerabilityId) {
-      getData<Vulnerability>(`/api/vulnerabilities/${vulnerabilityId}`, setCtxVulnerability, () =>
-        toast.error("Could not get vulnerability by id: " + vulnerabilityId)
-      );
+      getData<Vulnerability>(`/api/vulnerabilities/${vulnerabilityId}`, setCtxVulnerability);
     }
     if (categoryId != undefined && ctxCategory?.id !== categoryId) {
-      getData<Category>(`/api/categories/${categoryId}`, setCtxCategory, () =>
-        toast.error("Could not get category by id: " + categoryId)
-      );
+      getData<Category>(`/api/categories/${categoryId}`, setCtxCategory);
     }
   }, [customerId, assessmentId, vulnerabilityId, categoryId]);
 
