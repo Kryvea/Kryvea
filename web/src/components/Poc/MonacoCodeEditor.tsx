@@ -229,6 +229,16 @@ export default function MonacoCodeEditor({
   const handleEditorMount: OnMount = editor => {
     setEditor(editor);
 
+    editor.getContainerDomNode().addEventListener(
+      "wheel",
+      e => {
+        if (editor.hasWidgetFocus()) {
+          e.preventDefault();
+        }
+      },
+      { passive: false }
+    );
+
     editor.onDidChangeCursorSelection(e => {
       let { selection, secondarySelections } = e;
       const allCursorSelections = [selection, ...secondarySelections];
