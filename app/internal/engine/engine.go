@@ -73,6 +73,8 @@ func (e *Engine) Serve() {
 		apiGroup.Get("/categories", api.GetCategories)
 		apiGroup.Get("/categories/:category", api.GetCategory)
 
+		apiGroup.Get("/vulnerability-fields", api.GetVulnerabilityFields)
+
 		apiGroup.Get("/templates", api.GetTemplates)
 		apiGroup.Get("/templates/:template", api.GetTemplate)
 		apiGroup.Delete("/templates/:template", api.DeleteTemplate)
@@ -134,6 +136,7 @@ func (e *Engine) Serve() {
 
 		adminGroup.Get("/settings", api.GetSettings)
 		adminGroup.Put("/settings", api.UpdateSettings)
+		adminGroup.Get("/settings/vulnerability-fields/:key/impact", api.GetVulnerabilityFieldImpact)
 	}
 
 	app.Use(func(c *fiber.Ctx) error {

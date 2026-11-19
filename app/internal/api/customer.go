@@ -14,9 +14,10 @@ import (
 )
 
 type customerRequestData struct {
-	Name          string   `json:"name"`
-	Language      string   `json:"language"`
-	AssignedUsers []string `json:"assigned_users"`
+	Name                   string   `json:"name"`
+	Language               string   `json:"language"`
+	AssignedUsers          []string `json:"assigned_users"`
+	VulnerabilityFieldKeys []string `json:"vulnerability_field_keys"`
 }
 
 func (d *Driver) AddCustomer(c *fiber.Ctx) error {
@@ -56,14 +57,18 @@ func (d *Driver) AddCustomer(c *fiber.Ctx) error {
 		}
 
 		customer := &model.Customer{
-			Name:         data.Name,
-			Language:     data.Language,
-			LogoID:       logoId,
-			LogoMimeType: mime,
+			Name:                   data.Name,
+			Language:               data.Language,
+			LogoID:                 logoId,
+			LogoMimeType:           mime,
+			VulnerabilityFieldKeys: data.VulnerabilityFieldKeys,
 		}
 
 		customerID, err := d.db.Customer().Insert(ctx, customer)
 		if err != nil {
+			if errors.Is(err, model.ErrInvalidVulnerabilityFields) {
+				return uuid.Nil, err
+			}
 			if errors.Is(err, store.ErrDuplicateKey) {
 				return uuid.Nil, fmt.Errorf("Customer \"%s\" already exists", customer.Name)
 			}
@@ -143,12 +148,16 @@ func (d *Driver) UpdateCustomer(c *fiber.Ctx) error {
 	}
 
 	newCustomer := &model.Customer{
-		Name:     data.Name,
-		Language: data.Language,
+		Name:                   data.Name,
+		Language:               data.Language,
+		VulnerabilityFieldKeys: data.VulnerabilityFieldKeys,
 	}
 
 	err := d.db.Customer().Update(c.UserContext(), customer.ID, newCustomer)
 	if err != nil {
+		if errors.Is(err, model.ErrInvalidVulnerabilityFields) {
+			return jsonError(c, fiber.StatusBadRequest, err.Error())
+		}
 		if errors.Is(err, store.ErrDuplicateKey) {
 			return jsonError(c, fiber.StatusBadRequest, fmt.Sprintf("Customer \"%s\" already exists", newCustomer.Name))
 		}

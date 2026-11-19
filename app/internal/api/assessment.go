@@ -424,11 +424,21 @@ func (d *Driver) ExportAssessment(c *fiber.Ctx) error {
 		return jsonError(c, fiber.StatusInternalServerError, "Failed to read image data")
 	}
 
+	settings, err := d.db.Setting().Get(c.UserContext())
+	if err != nil {
+		return jsonError(c, fiber.StatusInternalServerError, "Cannot retrieve vulnerability custom fields")
+	}
+
+	for i := range vulnerabilities {
+		vulnerabilities[i].CustomFields = model.KnownCustomFields(vulnerabilities[i].CustomFields, settings.VulnerabilityFields)
+	}
+
 	reportData := &reportdata.ReportData{
-		Customer:         customer,
-		Assessment:       assessment,
-		Vulnerabilities:  vulnerabilities,
-		DeliveryDateTime: data.DeliveryDateTime,
+		VulnerabilityFields: settings.VulnerabilityFields,
+		Customer:            customer,
+		Assessment:          assessment,
+		Vulnerabilities:     vulnerabilities,
+		DeliveryDateTime:    data.DeliveryDateTime,
 	}
 
 	options := &reportdata.Options{
