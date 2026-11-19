@@ -10,6 +10,7 @@ import (
 
 type ReportData struct {
 	Customer                  *model.Customer
+	VulnerabilityFields       []model.VulnerabilityField
 	Assessment                *model.Assessment
 	Vulnerabilities           []model.Vulnerability
 	AggregatedVulnerabilities []AggregatedVulnerability
@@ -42,6 +43,7 @@ func (rd *ReportData) Prepare(sortByCvss string) {
 	SanitizeCustomer(rd.Customer)
 
 	SanitizeAssessment(rd.Assessment)
+	rd.VulnerabilityFields = sanitizeFieldLabels(rd.VulnerabilityFields)
 
 	SanitizeAndSortVulnerabilities(rd.Vulnerabilities, maxVersion, rd.Assessment.Language)
 

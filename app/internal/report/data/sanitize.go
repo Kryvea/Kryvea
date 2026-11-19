@@ -30,6 +30,14 @@ func SanitizeAssessment(assessment *model.Assessment) {
 	assessment.OSSTMMVector = escapeXMLString(assessment.OSSTMMVector)
 }
 
+func sanitizeFieldLabels(fields []model.VulnerabilityField) []model.VulnerabilityField {
+	result := append([]model.VulnerabilityField{}, fields...)
+	for i := range result {
+		result[i].Label = escapeXMLString(result[i].Label)
+	}
+	return result
+}
+
 func sanitizeTarget(target *model.Target) {
 	target.IPv4 = escapeXMLString(target.IPv4)
 	target.IPv6 = escapeXMLString(target.IPv6)
@@ -98,6 +106,14 @@ func sanitizeVulnerability(item *model.Vulnerability) {
 	item.GenericRemediation.Text = escapeXMLString(item.GenericRemediation.Text)
 	item.Description = escapeXMLString(item.Description)
 	item.Remediation = escapeXMLString(item.Remediation)
+	// Reports may share maps with their input or aggregated findings. Escape a
+	// fresh map so rendering never changes another vulnerability's saved content.
+	customFields := make(map[string]string, len(item.CustomFields))
+	for key, value := range item.CustomFields {
+		value = strings.ReplaceAll(strings.ReplaceAll(value, "\r\n", "\n"), "\r", "\n")
+		customFields[key] = escapeXMLString(value)
+	}
+	item.CustomFields = customFields
 	sanitizeTarget(&item.Target)
 }
 

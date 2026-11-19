@@ -14,11 +14,12 @@ import (
 )
 
 type ReportDataJSON struct {
-	Customer         *model.Customer        `json:"customer"`
-	Assessment       *model.Assessment      `json:"assessment"`
-	Vulnerabilities  []model.Vulnerability  `json:"vulnerabilities"`
-	DeliveryDateTime time.Time              `json:"delivery_date_time"`
-	MaxCVSS          map[string]cvss.Vector `json:"max_cvss"`
+	Customer            *model.Customer            `json:"customer"`
+	VulnerabilityFields []model.VulnerabilityField `json:"vulnerability_fields"`
+	Assessment          *model.Assessment          `json:"assessment"`
+	Vulnerabilities     []model.Vulnerability      `json:"vulnerabilities"`
+	DeliveryDateTime    time.Time                  `json:"delivery_date_time"`
+	MaxCVSS             map[string]cvss.Vector     `json:"max_cvss"`
 }
 
 func (t *ZipDefaultTemplate) renderReport(reportData *reportdata.ReportData, options *reportdata.Options) ([]byte, error) {
@@ -39,11 +40,12 @@ func (t *ZipDefaultTemplate) renderReport(reportData *reportdata.ReportData, opt
 	}
 
 	data := &ReportDataJSON{
-		Customer:         reportData.Customer,
-		Assessment:       reportData.Assessment,
-		Vulnerabilities:  reportData.Vulnerabilities,
-		DeliveryDateTime: reportData.DeliveryDateTime,
-		MaxCVSS:          reportData.MaxCVSS,
+		Customer:            reportData.Customer,
+		VulnerabilityFields: reportData.VulnerabilityFields,
+		Assessment:          reportData.Assessment,
+		Vulnerabilities:     reportData.Vulnerabilities,
+		DeliveryDateTime:    reportData.DeliveryDateTime,
+		MaxCVSS:             reportData.MaxCVSS,
 	}
 
 	var b []byte

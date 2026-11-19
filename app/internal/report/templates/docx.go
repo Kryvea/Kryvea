@@ -3,6 +3,7 @@ package templates
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"text/template"
 
 	gotemplatedocx "github.com/JJJJJJack/go-template-docx"
@@ -54,6 +55,12 @@ func (t *DocxTemplate) Render(reportData *reportdata.ReportData, options *report
 	t.filename = fmt.Sprintf("%s - %s - %s", reportData.Assessment.Type.Short, reportData.Customer.Name, reportData.Assessment.Name)
 
 	reportData.Prepare(options.SortByCvss)
+
+	for i := range reportData.Vulnerabilities {
+		for key, value := range reportData.Vulnerabilities[i].CustomFields {
+			reportData.Vulnerabilities[i].CustomFields[key] = strings.ReplaceAll(value, "\n", `</w:t><w:br/><w:t xml:space="preserve">`)
+		}
+	}
 
 	DocxTemplate, err := gotemplatedocx.NewDocxTemplateFromBytes(t.TemplateBytes)
 	if err != nil {
