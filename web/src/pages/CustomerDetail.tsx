@@ -20,10 +20,12 @@ import SelectWrapper from "../components/Form/SelectWrapper";
 import { SelectOption } from "../components/Form/SelectWrapper.types";
 import { ACCEPTED_IMAGE_TYPES, isAcceptedImageFile } from "../components/Form/ImageUpload";
 import UploadFile from "../components/Form/UploadFile";
+import VulnerabilityFieldSelection from "../components/Form/VulnerabilityFieldSelection";
 import { Customer, Template, uuidZero } from "../types/common.types";
 import { languageMapping, USER_ROLE_ADMIN } from "../utils/constants";
 import { getPageTitle } from "../utils/helpers";
 import { useTableUrlState } from "../utils/useTableUrlState";
+import { useVulnerabilityFields } from "../utils/useVulnerabilityFields";
 
 export default function CustomerDetail() {
   const {
@@ -43,10 +45,12 @@ export default function CustomerDetail() {
 
   const [logoId, setLogoId] = useState<string>("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const { fields, error: fieldsError, retry: retryFields } = useVulnerabilityFields();
 
   const [formCustomer, setFormCustomer] = useState({
     name: ctxCustomer?.name,
     language: ctxCustomer?.language,
+    vulnerability_field_keys: ctxCustomer?.vulnerability_field_keys,
   });
 
   const [newTemplateData, setNewTemplateData] = useState({
@@ -63,7 +67,11 @@ export default function CustomerDetail() {
   const selectedCustomerLanguage = languageOptions.find(opt => opt.value === formCustomer.language);
 
   useEffect(() => {
-    setFormCustomer({ name: ctxCustomer?.name, language: ctxCustomer?.language });
+    setFormCustomer({
+      name: ctxCustomer?.name,
+      language: ctxCustomer?.language,
+      vulnerability_field_keys: ctxCustomer?.vulnerability_field_keys,
+    });
   }, [ctxCustomer]);
 
   useEffect(() => {
@@ -107,6 +115,7 @@ export default function CustomerDetail() {
     const payload = {
       name: formCustomer.name.trim(),
       language: formCustomer.language,
+      vulnerability_field_keys: formCustomer.vulnerability_field_keys,
     };
 
     patchData(`/api/admin/customers/${ctxCustomer?.id}`, payload, () => {
@@ -316,6 +325,15 @@ export default function CustomerDetail() {
               onChange={option => setFormCustomer(prev => ({ ...prev, language: option.value }))}
             />
           </Grid>
+          <Divider />
+          <VulnerabilityFieldSelection
+            fields={fields}
+            selectedKeys={formCustomer.vulnerability_field_keys ?? []}
+            onChange={keys => setFormCustomer(prev => ({ ...prev, vulnerability_field_keys: keys }))}
+            disabled={!isAdmin}
+            error={fieldsError}
+            onRetry={retryFields}
+          />
           <Divider />
           <Buttons>
             <Button

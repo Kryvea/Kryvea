@@ -12,9 +12,11 @@ import Input from "../components/Form/Input";
 import SelectWrapper from "../components/Form/SelectWrapper";
 import { SelectOption } from "../components/Form/SelectWrapper.types";
 import UploadImage from "../components/Form/UploadImage";
+import VulnerabilityFieldSelection from "../components/Form/VulnerabilityFieldSelection";
 import { Customer, User } from "../types/common.types";
 import { languageMapping } from "../utils/constants";
 import { getPageTitle } from "../utils/helpers";
+import { useVulnerabilityFields } from "../utils/useVulnerabilityFields";
 
 export default function AddCustomer() {
   const navigate = useNavigate();
@@ -24,6 +26,10 @@ export default function AddCustomer() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [assignedUsers, setAssignedUsers] = useState<SelectOption[]>([]);
   const [userOptions, setUserOptions] = useState<SelectOption[]>([]);
+  const { fields, error: fieldsError, retry: retryFields } = useVulnerabilityFields();
+  const [fieldKeys, setFieldKeys] = useState<string[]>();
+
+  const selectedFieldKeys = fieldKeys ?? fields?.map(field => field.key);
 
   const languageOptions: SelectOption[] = Object.entries(languageMapping).map(([code, label]) => ({
     value: code,
@@ -52,6 +58,7 @@ export default function AddCustomer() {
       name: companyName.trim(),
       language,
       assigned_users: assignedUsers.map(user => user.value),
+      vulnerability_field_keys: selectedFieldKeys,
     };
 
     const formData = new FormData();
@@ -103,6 +110,14 @@ export default function AddCustomer() {
               closeMenuOnSelect={false}
             />
           </Grid>
+          <Divider />
+          <VulnerabilityFieldSelection
+            fields={fields}
+            selectedKeys={selectedFieldKeys ?? []}
+            onChange={setFieldKeys}
+            error={fieldsError}
+            onRetry={retryFields}
+          />
           <Divider />
 
           <Buttons>
