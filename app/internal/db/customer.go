@@ -7,6 +7,7 @@ import (
 	"github.com/Kryvea/Kryvea/internal/util"
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
 )
 
 type CustomerIndex struct{ driver *Driver }
@@ -14,6 +15,19 @@ type CustomerIndex struct{ driver *Driver }
 func (ci *CustomerIndex) Insert(ctx context.Context, customer *model.Customer) (uuid.UUID, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
+		return uuid.Nil, err
+	}
+
+	fields, err := ci.driver.vulnerabilityFields(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if customer.VulnerabilityFieldKeys == nil {
+		customer.VulnerabilityFieldKeys = model.VulnerabilityFieldKeys(fields)
+	}
+
+	if err := model.ValidateVulnerabilityFieldKeys(customer.VulnerabilityFieldKeys, fields); err != nil {
 		return uuid.Nil, err
 	}
 
@@ -27,6 +41,8 @@ func (ci *CustomerIndex) Insert(ctx context.Context, customer *model.Customer) (
 		Language:      customer.Language,
 		LogoMimeType:  customer.LogoMimeType,
 		LogoReference: customer.LogoReference,
+
+		VulnerabilityFieldKeys: customer.VulnerabilityFieldKeys,
 	}
 
 	if customer.LogoID != uuid.Nil {
@@ -44,12 +60,26 @@ func (ci *CustomerIndex) Insert(ctx context.Context, customer *model.Customer) (
 }
 
 func (ci *CustomerIndex) Update(ctx context.Context, id uuid.UUID, customer *model.Customer) error {
-	_, err := idbFrom(ctx, ci.driver.db).NewUpdate().
+	q := idbFrom(ctx, ci.driver.db).NewUpdate().
 		Model((*dbCustomer)(nil)).
 		Set("name = ?", customer.Name).
 		Set("language = ?", customer.Language).
-		Where("id = ?", id).
-		Exec(ctx)
+		Where("id = ?", id)
+
+	if customer.VulnerabilityFieldKeys != nil {
+		fields, err := ci.driver.vulnerabilityFields(ctx)
+		if err != nil {
+			return err
+		}
+
+		if err := model.ValidateVulnerabilityFieldKeys(customer.VulnerabilityFieldKeys, fields); err != nil {
+			return err
+		}
+
+		q = q.Set("vulnerability_field_keys = ?", pgdialect.Array(customer.VulnerabilityFieldKeys))
+	}
+
+	_, err := q.Exec(ctx)
 
 	return mapErr(err)
 }

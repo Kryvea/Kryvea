@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+
 	"github.com/Kryvea/Kryvea/internal/model"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/text/language"
@@ -50,7 +52,9 @@ func (d *Driver) UpdateSettings(c *fiber.Ctx) error {
 		DefaultCategoryLanguage: data.DefaultCategoryLanguage,
 	}
 
-	err := d.db.Setting().Update(c.UserContext(), setting)
+	_, err := d.db.RunInTx(c.UserContext(), func(ctx context.Context) (any, error) {
+		return nil, d.db.Setting().Update(ctx, setting)
+	})
 	if err != nil {
 		return jsonError(c, fiber.StatusBadRequest, "Cannot update settings")
 	}
