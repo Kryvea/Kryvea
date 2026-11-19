@@ -29,6 +29,7 @@ type DataColumn<Row> = {
 
 type ActionsColumn<Row> = {
   kind: "actions";
+  minWidth?: number;
   render: (row: Row) => ReactNode;
 };
 
@@ -317,8 +318,17 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colSignature, ready]);
 
-  const allWidthsKnown = columns.every(column => widths[columnKey(column)] != null);
-  const totalWidth = allWidthsKnown ? columns.reduce((sum, column) => sum + widths[columnKey(column)], 0) : undefined;
+  const columnWidths = { ...widths };
+  for (const column of columns) {
+    if (column.kind === "actions" && column.minWidth != null) {
+      const key = columnKey(column);
+      columnWidths[key] = Math.max(columnWidths[key] ?? 0, column.minWidth);
+    }
+  }
+  const allWidthsKnown = columns.every(column => columnWidths[columnKey(column)] != null);
+  const totalWidth = allWidthsKnown
+    ? columns.reduce((sum, column) => sum + columnWidths[columnKey(column)], 0)
+    : undefined;
 
   // Stable ref callbacks per key so refs aren't detached and re-attached on every render.
   const setHeaderRef = (key: string) => {
@@ -406,7 +416,7 @@ function useResizableColumns<Row>(columns: Column<Row>[], tableId?: string, read
   };
 
   return {
-    widths,
+    widths: columnWidths,
     allWidthsKnown,
     totalWidth,
     containerRef,

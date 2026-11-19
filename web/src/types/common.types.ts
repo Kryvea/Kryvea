@@ -1,5 +1,10 @@
 export type ObjectKey = string | number | symbol;
 
+export type VulnerabilityField = {
+  key: string;
+  label: string;
+};
+
 export type ObjectWithId = {
   id: string;
   [k: ObjectKey]: any;
@@ -45,6 +50,7 @@ export type Vulnerability = {
   generic_remediation: { enabled: boolean; text: string };
   description: string;
   remediation: string;
+  custom_fields: Record<string, string>;
   target: Target;
   assessment: Assessment;
   user: { id: string; username: string };
@@ -98,6 +104,7 @@ export type Customer = {
   logo_id: string;
   updated_at: Date;
   created_at: Date;
+  vulnerability_field_keys: string[];
   templates: Template[];
 };
 
@@ -129,6 +136,7 @@ export type Template = {
 export type Settings = {
   max_image_size: number;
   default_category_language: string;
+  vulnerability_fields: VulnerabilityField[];
 };
 
 export type ThemeMode = "light" | "dark" | "os";

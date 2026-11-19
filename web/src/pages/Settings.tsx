@@ -10,7 +10,8 @@ import Button from "../components/Form/Button";
 import Buttons from "../components/Form/Buttons";
 import Input from "../components/Form/Input";
 import SelectWrapper from "../components/Form/SelectWrapper";
-import type { Settings } from "../types/common.types";
+import VulnerabilityFieldsEditor from "../components/Form/VulnerabilityFieldsEditor";
+import type { Settings, VulnerabilityField } from "../types/common.types";
 import { languageMapping } from "../utils/constants";
 import { getPageTitle } from "../utils/helpers";
 
@@ -23,11 +24,16 @@ export default function Settings() {
   const [settings, setSettings] = useState<Settings>({
     max_image_size: 0,
     default_category_language: "",
+    vulnerability_fields: [],
   });
+  const [savedFields, setSavedFields] = useState<VulnerabilityField[]>();
 
   useEffect(() => {
     document.title = getPageTitle("Settings");
-    getData("/api/admin/settings", setSettings);
+    getData<Settings>("/api/admin/settings", data => {
+      setSettings(data);
+      setSavedFields(data.vulnerability_fields);
+    });
   }, []);
 
   const selectedLanguageOption = languageOptions.find(opt => opt.value === settings.default_category_language);
@@ -38,6 +44,7 @@ export default function Settings() {
 
   const handleSubmit = () => {
     putData("/api/admin/settings", settings, () => {
+      setSavedFields(settings.vulnerability_fields);
       toast.success("Settings updated");
     });
   };
@@ -65,8 +72,15 @@ export default function Settings() {
           />
         </Grid>
         <Divider />
+        <VulnerabilityFieldsEditor
+          fields={settings.vulnerability_fields}
+          savedFields={savedFields ?? []}
+          disabled={!savedFields}
+          onChange={vulnerability_fields => setSettings(prev => ({ ...prev, vulnerability_fields }))}
+        />
+        <Divider />
         <Buttons>
-          <Button text="Submit" onClick={handleSubmit} />
+          <Button text="Submit" onClick={handleSubmit} disabled={!savedFields} />
         </Buttons>
       </Card>
     </div>
