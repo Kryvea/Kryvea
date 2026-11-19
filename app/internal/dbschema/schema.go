@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	RequiredVersion    = "202610010001" // RequiredVersion is the latest schema version. Must match the latest migration file in db/migrations
+	RequiredVersion    = "202611030001" // RequiredVersion is the latest schema version. Must match the latest migration file in db/migrations
 	MigrationTableName = "public.bun_migrations"
 )
 

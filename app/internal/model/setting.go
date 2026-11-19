@@ -12,6 +12,7 @@ var SettingID uuid.UUID = [16]byte{
 
 type Setting struct {
 	Model
-	MaxImageSize            int64  `json:"-"`
-	DefaultCategoryLanguage string `json:"default_category_language"`
+	MaxImageSize            int64                `json:"-"`
+	DefaultCategoryLanguage string               `json:"default_category_language"`
+	VulnerabilityFields     []VulnerabilityField `json:"vulnerability_fields"`
 }

@@ -12,19 +12,24 @@ import (
 type dbSetting struct {
 	bun.BaseModel `bun:"table:setting,alias:s"`
 
-	ID                      uuid.UUID `bun:"id,pk,type:uuid"`
-	CreatedAt               time.Time `bun:"created_at,nullzero,notnull,default:now()"`
-	UpdatedAt               time.Time `bun:"updated_at,nullzero,notnull,default:now()"`
-	MaxImageSize            int64     `bun:"max_image_size,notnull,default:5242880"`
-	DefaultCategoryLanguage string    `bun:"default_category_language,notnull,default:'en'"`
+	ID                      uuid.UUID                  `bun:"id,pk,type:uuid"`
+	CreatedAt               time.Time                  `bun:"created_at,nullzero,notnull,default:now()"`
+	UpdatedAt               time.Time                  `bun:"updated_at,nullzero,notnull,default:now()"`
+	MaxImageSize            int64                      `bun:"max_image_size,notnull,default:5242880"`
+	DefaultCategoryLanguage string                     `bun:"default_category_language,notnull,default:'en'"`
+	VulnerabilityFields     []model.VulnerabilityField `bun:"vulnerability_fields,type:jsonb,notnull,default:'[]'"`
 }
 
 func (r *dbSetting) toModel() model.Setting {
 	out := model.Setting{
 		MaxImageSize:            r.MaxImageSize,
 		DefaultCategoryLanguage: r.DefaultCategoryLanguage,
+		VulnerabilityFields:     r.VulnerabilityFields,
 	}
 
+	if out.VulnerabilityFields == nil {
+		out.VulnerabilityFields = []model.VulnerabilityField{}
+	}
 	out.ID = r.ID
 	out.CreatedAt = r.CreatedAt
 	out.UpdatedAt = r.UpdatedAt
@@ -71,16 +76,19 @@ type dbCustomer struct {
 	LogoMimeType  string     `bun:"logo_mime_type,notnull,default:''"`
 	LogoReference string     `bun:"logo_reference,notnull,default:''"`
 
+	VulnerabilityFieldKeys []string `bun:"vulnerability_field_keys,array,notnull,default:'{}'"`
+
 	Templates []dbTemplate `bun:"rel:has-many,join:id=customer_id"`
 }
 
 func (r *dbCustomer) toModel() model.Customer {
 	out := model.Customer{
-		Name:          r.Name,
-		Language:      r.Language,
-		LogoMimeType:  r.LogoMimeType,
-		LogoReference: r.LogoReference,
-		Templates:     []model.Template{},
+		Name:                   r.Name,
+		Language:               r.Language,
+		LogoMimeType:           r.LogoMimeType,
+		LogoReference:          r.LogoReference,
+		VulnerabilityFieldKeys: emptyStringsIfNil(r.VulnerabilityFieldKeys),
+		Templates:              []model.Template{},
 	}
 
 	out.ID = r.ID
@@ -380,30 +388,31 @@ func (r *dbTemplate) toModel() model.Template {
 type dbVulnerability struct {
 	bun.BaseModel `bun:"table:vulnerability,alias:v"`
 
-	ID                        uuid.UUID  `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
-	CreatedAt                 time.Time  `bun:"created_at,nullzero,notnull,default:now()"`
-	UpdatedAt                 time.Time  `bun:"updated_at,nullzero,notnull,default:now()"`
-	AssessmentID              uuid.UUID  `bun:"assessment_id,notnull,type:uuid"`
-	CustomerID                uuid.UUID  `bun:"customer_id,notnull,type:uuid"`
-	TargetID                  uuid.UUID  `bun:"target_id,notnull,type:uuid"`
-	UserID                    *uuid.UUID `bun:"user_id,nullzero,type:uuid"`
-	CategoryID                uuid.UUID  `bun:"category_id,notnull,type:uuid"`
-	DetailedTitle             string     `bun:"detailed_title,notnull,default:''"`
-	Status                    string     `bun:"status,notnull,default:''"`
-	CVSSv2Vector              string     `bun:"cvssv2_vector,notnull,default:''"`
-	CVSSv2Score               float64    `bun:"cvssv2_score,notnull,default:0"`
-	CVSSv3Vector              string     `bun:"cvssv3_vector,notnull,default:''"`
-	CVSSv3Score               float64    `bun:"cvssv3_score,notnull,default:0"`
-	CVSSv31Vector             string     `bun:"cvssv31_vector,notnull,default:''"`
-	CVSSv31Score              float64    `bun:"cvssv31_score,notnull,default:0"`
-	CVSSv4Vector              string     `bun:"cvssv4_vector,notnull,default:''"`
-	CVSSv4Score               float64    `bun:"cvssv4_score,notnull,default:0"`
-	References                []string   `bun:"refs,array,notnull,default:'{}'"`
-	Description               string     `bun:"description,notnull,default:''"`
-	Remediation               string     `bun:"remediation,notnull,default:''"`
-	GenericDescriptionEnabled bool       `bun:"generic_description_enabled,notnull,default:true"`
-	GenericRemediationEnabled bool       `bun:"generic_remediation_enabled,notnull,default:false"`
-	GenericRemediationText    string     `bun:"generic_remediation_text,notnull,default:''"`
+	ID                        uuid.UUID         `bun:"id,pk,type:uuid,default:gen_random_uuid()"`
+	CreatedAt                 time.Time         `bun:"created_at,nullzero,notnull,default:now()"`
+	UpdatedAt                 time.Time         `bun:"updated_at,nullzero,notnull,default:now()"`
+	AssessmentID              uuid.UUID         `bun:"assessment_id,notnull,type:uuid"`
+	CustomerID                uuid.UUID         `bun:"customer_id,notnull,type:uuid"`
+	TargetID                  uuid.UUID         `bun:"target_id,notnull,type:uuid"`
+	UserID                    *uuid.UUID        `bun:"user_id,nullzero,type:uuid"`
+	CategoryID                uuid.UUID         `bun:"category_id,notnull,type:uuid"`
+	DetailedTitle             string            `bun:"detailed_title,notnull,default:''"`
+	Status                    string            `bun:"status,notnull,default:''"`
+	CVSSv2Vector              string            `bun:"cvssv2_vector,notnull,default:''"`
+	CVSSv2Score               float64           `bun:"cvssv2_score,notnull,default:0"`
+	CVSSv3Vector              string            `bun:"cvssv3_vector,notnull,default:''"`
+	CVSSv3Score               float64           `bun:"cvssv3_score,notnull,default:0"`
+	CVSSv31Vector             string            `bun:"cvssv31_vector,notnull,default:''"`
+	CVSSv31Score              float64           `bun:"cvssv31_score,notnull,default:0"`
+	CVSSv4Vector              string            `bun:"cvssv4_vector,notnull,default:''"`
+	CVSSv4Score               float64           `bun:"cvssv4_score,notnull,default:0"`
+	References                []string          `bun:"refs,array,notnull,default:'{}'"`
+	Description               string            `bun:"description,notnull,default:''"`
+	Remediation               string            `bun:"remediation,notnull,default:''"`
+	GenericDescriptionEnabled bool              `bun:"generic_description_enabled,notnull,default:true"`
+	GenericRemediationEnabled bool              `bun:"generic_remediation_enabled,notnull,default:false"`
+	GenericRemediationText    string            `bun:"generic_remediation_text,notnull,default:''"`
+	CustomFields              map[string]string `bun:"custom_fields,type:jsonb,notnull,default:'{}'"`
 
 	Assessment *dbAssessment `bun:"rel:belongs-to,join:assessment_id=id"`
 	Customer   *dbCustomer   `bun:"rel:belongs-to,join:customer_id=id"`
@@ -419,6 +428,7 @@ func (r *dbVulnerability) toModel() model.Vulnerability {
 		Description:   r.Description,
 		Remediation:   r.Remediation,
 		References:    r.References,
+		CustomFields:  emptyMapIfNil(r.CustomFields),
 	}
 
 	v.ID = r.ID
@@ -453,6 +463,7 @@ func (r *dbVulnerability) toModel() model.Vulnerability {
 
 	if r.Customer != nil {
 		v.Customer.Name = r.Customer.Name
+		v.Customer.VulnerabilityFieldKeys = emptyStringsIfNil(r.Customer.VulnerabilityFieldKeys)
 	}
 
 	if r.Target != nil {

@@ -11,6 +11,8 @@ type Customer struct {
 	LogoReference string     `json:"logo_reference"`
 	Templates     []Template `json:"templates"`
 
+	VulnerabilityFieldKeys []string `json:"vulnerability_field_keys"`
+
 	LogoData []byte `json:"-"`
 }
 
